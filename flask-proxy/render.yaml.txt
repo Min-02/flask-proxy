@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: flask-proxy
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python proxy.py
+    plan: free
