@@ -10,7 +10,7 @@ import io
 import base64
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/api/*": {"origins": "https://heroic-flan-80b6ca.netlify.app"}})
 
 @app.route("/api/proxy", methods=["GET"])
 def proxy():
