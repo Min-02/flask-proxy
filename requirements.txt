@@ -1,11 +1,7 @@
 Flask
 requests
-jsonify
 flask-cors
 urllib3
-ssl
-json
-geodesic
 pandas
 joblib
 shap
