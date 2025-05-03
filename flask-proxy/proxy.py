@@ -17,6 +17,9 @@ def proxy():
     service_key = "rA86OMjx7TmsRL+UAjovPORxHyyDJZxd6dIPJyKlqbPZzNo5fetvxLXhZ/MPki0fWIgUPGXq0thGIvFG5BmTZg=="
     base_url = "https://apis.data.go.kr/B553077/api/open/sdsc2/storeListInRadius"
 
+    response_data = {"message": "응답 내용"}
+    return jsonify(response_data)
+
     params = {
         "serviceKey": service_key,
         "radius": request.args.get("radius"),
