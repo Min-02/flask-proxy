@@ -2,7 +2,6 @@ Flask
 request
 jsonify
 flask-cors
-CORS
 urllib3
 ssl
 json
