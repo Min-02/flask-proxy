@@ -1,0 +1,8 @@
+name: flask-proxy
+app: python@3.12
+options:
+  start: gunicorn -b 0.0.0.0:5000 proxy:app
+build:
+  requirements:
+    - requirements.txt
+
