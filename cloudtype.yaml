@@ -1,5 +1,5 @@
 name: flask-proxy
-app: python@3.13
+app: python@3.12
 
 options:
   ports: 5000
