@@ -10,7 +10,7 @@ import io
 import base64
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "https://heroic-flan-80b6ca.netlify.app"}})
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 @app.route("/api/proxy", methods=["GET"])
 def proxy():
@@ -42,6 +42,12 @@ def proxy():
 
         http = urllib3.PoolManager(ssl_context=ctx)
         response = http.request("GET", full_url)
+
+        if response.status != 200:
+            return jsonify({"error": "외부 API 요청에 실패했습니다."}), 500
+
+        data = json.loads(response.data.decode("utf-8"))
+        return jsonify(data)
 
         print("[응답 상태]", response.status)
         data = json.loads(response.data.decode("utf-8"))
