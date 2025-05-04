@@ -109,12 +109,19 @@ def predict_sales():
         'SHAP Value': shap_values.flatten()
     }).sort_values(by="SHAP Value", key=abs, ascending=False)
 
+    # ✅ 반경 내 경쟁 점포(카페) 목록 필터링
+    경쟁점포 = data[
+        (data["inds_mcls_cd"] == indsMclsCd) &
+        (data["distance"] <= radius)
+    ]
+
     # 결과 전달
     return jsonify({
         "상권명": nearest["상권_코드_명"],
         "경쟁수": int(경쟁수),
         "예측매출": int(예측매출),
         "SHAP": shap_impact.head(5).to_dict(orient="records"),  # 상위 5개만 전달
+        "카페목록": 경쟁점포[["bizesNm", "lat", "lon"]].to_dict(orient="records")  # 마커 표시용
     })
 
 import os
