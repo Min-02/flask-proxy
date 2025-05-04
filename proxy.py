@@ -119,18 +119,12 @@ def predict_sales():
         show=False
     )
 
-    # force_plot을 HTML string으로 저장
-    shap_html = f"""
-        <html><head>{shap.getjs()}</head><body>{force_plot.html()}</body></html>
-        """
-
     # 결과 전달
     return jsonify({
         "상권명": nearest["상권_코드_명"],
         "경쟁수": int(경쟁수),
         "예측매출": int(예측매출),
         "SHAP": shap_impact.head(5).to_dict(orient="records"),  # 상위 5개만 전달
-        "shap_html": shap_html
     })
 
 import os
