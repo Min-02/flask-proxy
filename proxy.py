@@ -109,16 +109,6 @@ def predict_sales():
         'SHAP Value': shap_values.flatten()
     }).sort_values(by="SHAP Value", key=abs, ascending=False)
 
-    # force_plot HTML 생성
-    shap.initjs()
-    force_plot = shap.force_plot(
-        explainer.expected_value,
-        shap_values[0],  # 첫 번째 샘플만
-        sample.iloc[0],
-        matplotlib=False,
-        show=False
-    )
-
     # 결과 전달
     return jsonify({
         "상권명": nearest["상권_코드_명"],
