@@ -131,8 +131,8 @@ def predict_sales():
     #print("일치하는 상권만 필터링:")
     #print(df[df['상권_코드_명'] == nearest['상권_코드_명']])
 
-    #print("상권 + 업종 모두 일치하는 행:")
-    #print(competition_row)
+    print("상권 + 업종 모두 일치하는 행:")
+    print(competition_row)
 
     # ✅ 300m 내 매출 데이터가 있는 점포 수
     nearby_with_sales = df[
