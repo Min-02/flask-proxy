@@ -64,22 +64,15 @@ def predict_sales():
     radius_m = float(data["radius"])
     radius_km = radius_m / 1000
 
-    start_time, end_time = data["time_range"]
+    time_range = data["time_range"]  # 예: "6-14"
+    start_time_str, end_time_str = time_range.split("-")
+    start_time = int(start_time_str)
+    end_time = int(end_time_str)
     selected_days = data["day_of_week"]
 
     # 데이터 로드
     model = joblib.load("0504_xgboost_market_model.pkl")
     df = pd.read_csv("0504_광진구 상권 데이터 통합 완성본.csv", encoding="cp949")
-
-    # ✅ 시간대 정의 (언더바 기반)
-    defined_times = {
-        "시간대_00_06": (0, 6),
-        "시간대_06_11": (6, 11),
-        "시간대_11_14": (11, 14),
-        "시간대_14_17": (14, 17),
-        "시간대_17_21": (17, 21),
-        "시간대_21_24": (21, 24)
-    }
 
     # 가장 가까운 상권 찾기
     df["거리"] = df.apply(
@@ -105,7 +98,6 @@ def predict_sales():
     print()
     if num_competitors == 0:
         print("⚠️ 해당 상권에 해당 업종 점포가 없어 예측이 불가합니다.")
-        exit()
     elif num_competitors < 3 or num_with_sales == 0:
         print("⚠️ 이 상권의 해당 업종 혹은 매출 데이터가 부족하여 신뢰도가 낮습니다.")
 
@@ -160,6 +152,7 @@ def predict_sales():
         "예측매출": int(예측매출),
         "SHAP": shap_impact.head(5).to_dict(orient="records"),  # 상위 5개만 전달
     })
+
 
 import os
 
