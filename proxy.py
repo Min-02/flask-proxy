@@ -121,6 +121,8 @@ def predict_sales():
 
     print("상권 + 업종 모두 일치하는 행:")
     print(competition_row)
+    # competition_row를 CSV 파일로 저장
+    competition_row.to_csv("competition_row.csv", index=False, encoding='utf-8')
 
     # ✅ 300m 내 매출 데이터가 있는 점포 수
     nearby_with_sales = df[
