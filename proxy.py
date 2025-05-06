@@ -115,7 +115,7 @@ def predict_sales():
     competition_row = df[
         (df['상권_코드_명'] == nearest['상권_코드_명']) &
         (df['서비스_업종_코드_명'] == indsMclsNm)
-        ].iloc[0]
+        ]
     if competition_row.empty:
         return jsonify({"error": "해당 상권에 선택한 업종에 대한 데이터가 없습니다."})
     num_competitors = competition_row['300m내_경쟁_업종_수']
@@ -123,6 +123,7 @@ def predict_sales():
     # 필터링 결과를 출력
     print("필터링된 데이터 (상위 5행):")
     print(competition_row.head())
+    print(f"competition_row의 shape: {competition_row.shape}")
 
     # competition_row의 shape 확인
     print(f"competition_row의 shape: {competition_row.shape}")
