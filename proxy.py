@@ -80,6 +80,16 @@ def predict_sales():
     )
     nearest = df.loc[df["거리"].idxmin()].copy()
 
+    # 선택된 상권명과 업종명 출력
+    print("🔍 선택한 상권명:", nearest['상권_코드_명'])
+    print("🔍 선택한 업종명:", indsMclsCd)
+
+    # 해당 상권에 있는 업종들 출력
+    업종리스트 = df[df['상권_코드_명'] == nearest['상권_코드_명']]['서비스_업종_코드_명'].unique()
+    print("📋 해당 상권 내 업종 리스트:")
+    for 업종 in 업종리스트:
+        print("-", 업종)
+
     # ✅ 상권 + 업종 기준으로 경쟁 업종 수 추출
     competition_row = df[
         (df['상권_코드_명'] == nearest['상권_코드_명']) &
