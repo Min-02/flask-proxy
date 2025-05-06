@@ -100,6 +100,16 @@ def predict_sales():
     for 업종 in 업종리스트:
         print("-", 업종)
 
+    # 필터링 전에 원본 데이터의 일부를 출력
+    print("원본 데이터 (상위 5행):")
+    print(df.head())
+
+    # 상권 코드와 업종 코드로 필터링하기 전에 해당 컬럼의 고유 값 출력
+    print("상권_코드_명 고유 값:")
+    print(df['상권_코드_명'].unique())
+
+    print("서비스_업종_코드_명 고유 값:")
+    print(df['서비스_업종_코드_명'].unique())
 
     # ✅ 상권 + 업종 기준으로 경쟁 업종 수 추출
     competition_row = df[
@@ -110,19 +120,18 @@ def predict_sales():
         return jsonify({"error": "해당 상권에 선택한 업종에 대한 데이터가 없습니다."})
     num_competitors = competition_row['300m내_경쟁_업종_수']
 
-    print("indsMclsNm:", indsMclsNm)
-    print("unique 업종명:", df['서비스_업종_코드_명'].unique())
+    # 필터링 결과를 출력
+    print("필터링된 데이터 (상위 5행):")
+    print(competition_row.head())
 
-    print("nearest 상권:", nearest['상권_코드_명'])
-    print("unique 상권:", df['상권_코드_명'].unique())
+    # competition_row의 shape 확인
+    print(f"competition_row의 shape: {competition_row.shape}")
 
-    print("일치하는 상권만 필터링:")
-    print(df[df['상권_코드_명'] == nearest['상권_코드_명']])
+    #print("일치하는 상권만 필터링:")
+    #print(df[df['상권_코드_명'] == nearest['상권_코드_명']])
 
-    print("상권 + 업종 모두 일치하는 행:")
-    print(competition_row)
-    # competition_row를 CSV 파일로 저장
-    competition_row.to_csv("competition_row.csv", index=False, encoding='utf-8')
+    #print("상권 + 업종 모두 일치하는 행:")
+    #print(competition_row)
 
     # ✅ 300m 내 매출 데이터가 있는 점포 수
     nearby_with_sales = df[
