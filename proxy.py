@@ -93,6 +93,9 @@ def predict_sales():
     # 선택된 상권명과 업종명 출력
     print("🔍 선택한 상권명:", nearest['상권_코드_명'])
     print("🔍 선택한 업종명:", indsMclsNm)
+    print("df서비스업종코드명", df['서비스_업종_코드_명'].unique())
+    print("near상권코드명", nearest['상권_코드_명'])
+    print("df상권코드명", df['상권_코드_명'].unique())
 
     # 해당 상권에 있는 업종들 출력
     업종리스트 = df[df['상권_코드_명'] == nearest['상권_코드_명']]['서비스_업종_코드_명'].unique()
@@ -107,7 +110,7 @@ def predict_sales():
         (df['서비스_업종_코드_명'] == indsMclsNm)
         ]
     if competition_row.empty:
-        return jsonify({"error": "해당 상권에 선택한 업종에 대한 데이터가 없습니다."}), 400
+        return jsonify({"error": "해당 상권에 선택한 업종에 대한 데이터가 없습니다."})
     num_competitors = competition_row['300m내_경쟁_업종_수']
 
     # ✅ 300m 내 매출 데이터가 있는 점포 수
