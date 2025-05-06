@@ -46,6 +46,10 @@ def proxy():
         data = json.loads(response.data.decode("utf-8"))
         return jsonify(data)
 
+        print("[응답 상태]", response.status)
+        data = json.loads(response.data.decode("utf-8"))
+        return jsonify(data)
+
     except Exception as e:
         print("예외 발생:", e)
         return jsonify({"error": str(e)}), 500
@@ -55,11 +59,7 @@ def predict_sales():
     from geopy.distance import geodesic
     import pandas as pd
     import joblib
-    
-    # 데이터 로드
-    model = joblib.load("0504_xgboost_market_model.pkl")
-    label_encoders = joblib.load("0504_label_encoders.pkl")
-    df = pd.read_csv("0504_광진구 상권 데이터 통합 완성본.csv", encoding="cp949")
+    import shap
 
     data = request.get_json()
     lat = float(data["lat"])
@@ -68,129 +68,54 @@ def predict_sales():
     radius_m = float(data["radius"])
     radius_km = radius_m / 1000
 
-    time_range = data["time_range"]  # 예: "6-14"
-    start_time_str, end_time_str = time_range.split("-")
-    start_time = int(start_time_str)
-    end_time = int(end_time_str)
-    selected_days = data["day_of_week"]
+    # 데이터 로드
+    model = joblib.load("xgboost_market_model.pkl")
+    df_info = pd.read_csv("merged_market_with_competition.csv")
+    df_store = pd.read_csv("광진구_한식중식카페_완전수집.csv", encoding="cp949")
 
-    # 코드 → 업종명 매핑
-    industry_code_map = {
-        "I212": "커피-음료",
-        "I201": "한식음식점",
-        "I202": "중식음식점",
-        # 필요 시 계속 추가
-    }
-    # ✅ 업종 코드 → 업종명 변환
-    indsMclsNm = industry_code_map.get(indsMclsCd)
-    en_indsMclsNm = label_encoders['서비스_업종_코드_명'].transform([indsMclsNm])[0]
+    features = [
+        "lat", "lon",
+        "총_유동인구_수", "연령대_20_유동인구_수", "연령대_30_유동인구_수", "연령대_40_유동인구_수",
+        "시간대_14_17_유동인구_수", "시간대_17_21_유동인구_수", "시간대_21_24_유동인구_수",
+        "경쟁_점포_수"
+    ]
 
     # 가장 가까운 상권 찾기
-    df["거리"] = df.apply(
+    df_info["거리"] = df_info.apply(
         lambda row: geodesic((lat, lon), (row["lat"], row["lon"])).km, axis=1
     )
-    nearest = df.loc[df["거리"].idxmin()]
-    change_encoded = label_encoders['상권_변화_지표_명'].transform([nearest['상권_변화_지표_명']])[0]
+    nearest = df_info.loc[df_info["거리"].idxmin()].copy()
 
-    # 선택된 상권명과 업종명 출력
-    print("🔍 선택한 상권명:", nearest['상권_코드_명'])
-    print("🔍 선택한 업종명:", indsMclsNm)
-
-    # 해당 상권에 있는 업종들 출력
-    업종리스트 = df[df['상권_코드_명'] == nearest['상권_코드_명']]['서비스_업종_코드_명'].unique()
-    print("📋 해당 상권 내 업종 리스트:")
-    for 업종 in 업종리스트:
-        print("-", 업종)
-
-    # 필터링 전에 원본 데이터의 일부를 출력
-    print("원본 데이터 (상위 5행):")
-    print(df.head())
-
-    # 상권 코드와 업종 코드로 필터링하기 전에 해당 컬럼의 고유 값 출력
-    print("상권_코드_명 고유 값:")
-    print(df['상권_코드_명'].unique())
-
-    print("서비스_업종_코드_명 고유 값:")
-    print(df['서비스_업종_코드_명'].unique())
-
-    # ✅ 상권 + 업종 기준으로 경쟁 업종 수 추출
-    competition_row = df[
-        (df['상권_코드_명'] == nearest['상권_코드_명']) &
-        (df['서비스_업종_코드_명'] == indsMclsNm)
-        ].iloc[0]
-    if competition_row.empty:
-        return jsonify({"error": "해당 상권에 선택한 업종에 대한 데이터가 없습니다."})
-    num_competitors = competition_row['300m내_경쟁_업종_수']
-
-    # 필터링 결과를 출력
-    print("필터링된 데이터 (상위 5행):")
-    print(competition_row.head())
-    print(f"competition_row의 shape: {competition_row.shape}")
-
-    # competition_row의 shape 확인
-    print(f"competition_row의 shape: {competition_row.shape}")
-
-    #print("일치하는 상권만 필터링:")
-    #print(df[df['상권_코드_명'] == nearest['상권_코드_명']])
-
-    print("상권 + 업종 모두 일치하는 행:")
-    print(competition_row)
-
-    # ✅ 300m 내 매출 데이터가 있는 점포 수
-    nearby_with_sales = df[
-        (df['서비스_업종_코드_명'] == indsMclsNm) &
-        (df['거리'] <= 300) &
-        (df['당월_매출_금액'].notna())
-        ]
-    num_with_sales = len(nearby_with_sales)
-
-    print()
-    if num_competitors == 0:
-        print("⚠️ 해당 상권에 해당 업종 점포가 없어 예측이 불가합니다.")
-    elif num_competitors < 3 or num_with_sales == 0:
-        print("⚠️ 이 상권의 해당 업종 혹은 매출 데이터가 부족하여 신뢰도가 낮습니다.")
-
-    # ✅ 입력 벡터 구성
-    features = pd.DataFrame([{
-        '총_유동인구_수': nearest['총_유동인구_수'],
-        '남성_유동인구_수': nearest['남성_유동인구_수'],
-        '여성_유동인구_수': nearest['여성_유동인구_수'],
-        '연령대_10_유동인구_수': nearest.get('연령대_10_유동인구_수', 0),
-        '연령대_20_유동인구_수': nearest.get('연령대_20_유동인구_수', 0),
-        '연령대_30_유동인구_수': nearest.get('연령대_30_유동인구_수', 0),
-        '연령대_40_유동인구_수': nearest.get('연령대_40_유동인구_수', 0),
-        '연령대_50_유동인구_수': nearest.get('연령대_50_유동인구_수', 0),
-        '연령대_60_이상_유동인구_수': nearest.get('연령대_60_이상_유동인구_수', 0),
-        '시간대_00_06_유동인구_수': nearest.get('시간대_00_06_유동인구_수', 0),
-        '시간대_06_11_유동인구_수': nearest.get('시간대_06_11_유동인구_수', 0),
-        '시간대_11_14_유동인구_수': nearest.get('시간대_11_14_유동인구_수', 0),
-        '시간대_14_17_유동인구_수': nearest.get('시간대_14_17_유동인구_수', 0),
-        '시간대_17_21_유동인구_수': nearest.get('시간대_17_21_유동인구_수', 0),
-        '시간대_21_24_유동인구_수': nearest.get('시간대_21_24_유동인구_수', 0),
-        '월요일_유동인구_수': nearest.get('월요일_유동인구_수', 0),
-        '화요일_유동인구_수': nearest.get('화요일_유동인구_수', 0),
-        '수요일_유동인구_수': nearest.get('수요일_유동인구_수', 0),
-        '목요일_유동인구_수': nearest.get('목요일_유동인구_수', 0),
-        '금요일_유동인구_수': nearest.get('금요일_유동인구_수', 0),
-        '토요일_유동인구_수': nearest.get('토요일_유동인구_수', 0),
-        '일요일_유동인구_수': nearest.get('일요일_유동인구_수', 0),
-        '서비스_업종_코드_명': en_indsMclsNm,
-        '상권_변화_지표_명': change_encoded,
-        '300m내_경쟁_업종_수': num_competitors
-    }])
+    # 경쟁 점포 수 계산
+    subset = df_store[df_store["indsMclsCd"] == indsMclsCd]
+    경쟁수 = sum(
+        geodesic((lat, lon), (row["lat"], row["lon"])).km <= radius_km
+        for _, row in subset.iterrows()
+    )
+    nearest["경쟁_점포_수"] = 경쟁수
 
     # 모델 입력 생성
     sample = nearest[features].to_frame().T.astype(float)
     예측매출 = model.predict(sample)[0]
 
+    # SHAP 계산
+    explainer = shap.TreeExplainer(model)
+    shap_values = explainer.shap_values(sample)
+
+    # 주요 기여도 테아블
+    shap_impact = pd.DataFrame({
+        'Feature': sample.columns,
+        'Feature Value': sample.values.flatten(),
+        'SHAP Value': shap_values.flatten()
+    }).sort_values(by="SHAP Value", key=abs, ascending=False)
 
     # 결과 전달
     return jsonify({
         "상권명": nearest["상권_코드_명"],
-        "경쟁수": int(num_competitors),
+        "경쟁수": int(경쟁수),
         "예측매출": int(예측매출),
+        "SHAP": shap_impact.head(5).to_dict(orient="records"),  # 상위 5개만 전달
     })
-
 
 import os
 
