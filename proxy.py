@@ -55,7 +55,11 @@ def predict_sales():
     from geopy.distance import geodesic
     import pandas as pd
     import joblib
-    import shap
+    
+    # 데이터 로드
+    model = joblib.load("0504_xgboost_market_model.pkl")
+    label_encoders = joblib.load("0504_label_encoders.pkl")
+    df = pd.read_csv("0504_광진구 상권 데이터 통합 완성본.csv", encoding="cp949")
 
     data = request.get_json()
     lat = float(data["lat"])
@@ -79,16 +83,14 @@ def predict_sales():
     }
     # ✅ 업종 코드 → 업종명 변환
     indsMclsNm = industry_code_map.get(indsMclsCd)
-
-    # 데이터 로드
-    model = joblib.load("0504_xgboost_market_model.pkl")
-    df = pd.read_csv("0504_광진구 상권 데이터 통합 완성본.csv", encoding="cp949")
+    en_indsMclsNm = label_encoders['서비스_업종_코드_명'].transform([indsMclsNm])[0]
 
     # 가장 가까운 상권 찾기
     df["거리"] = df.apply(
         lambda row: geodesic((lat, lon), (row["lat"], row["lon"])).km, axis=1
     )
-    nearest = df.loc[df["거리"].idxmin()].copy()
+    nearest = df.loc[df["거리"].idxmin()]
+    change_encoded = label_encoders['상권_변화_지표_명'].transform([nearest['상권_변화_지표_명']])[0]
 
     # 선택된 상권명과 업종명 출력
     print("🔍 선택한 상권명:", nearest['상권_코드_명'])
@@ -172,8 +174,8 @@ def predict_sales():
         '금요일_유동인구_수': nearest.get('금요일_유동인구_수', 0),
         '토요일_유동인구_수': nearest.get('토요일_유동인구_수', 0),
         '일요일_유동인구_수': nearest.get('일요일_유동인구_수', 0),
-        '서비스_업종_코드_명': indsMclsNm,
-        '상권_변화_지표_명': nearest.get('상권_변화_지표_명'),
+        '서비스_업종_코드_명': en_indsMclsNm,
+        '상권_변화_지표_명': change_encoded,
         '300m내_경쟁_업종_수': num_competitors
     }])
 
@@ -181,7 +183,7 @@ def predict_sales():
     sample = nearest[features].to_frame().T.astype(float)
     예측매출 = model.predict(sample)[0]
 
-    
+
     # 결과 전달
     return jsonify({
         "상권명": nearest["상권_코드_명"],
