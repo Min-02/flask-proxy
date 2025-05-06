@@ -115,7 +115,7 @@ def predict_sales():
     competition_row = df[
         (df['상권_코드_명'] == nearest['상권_코드_명']) &
         (df['서비스_업종_코드_명'] == indsMclsNm)
-        ]
+        ].iloc[0]
     if competition_row.empty:
         return jsonify({"error": "해당 상권에 선택한 업종에 대한 데이터가 없습니다."})
     num_competitors = competition_row['300m내_경쟁_업종_수']
@@ -181,23 +181,12 @@ def predict_sales():
     sample = nearest[features].to_frame().T.astype(float)
     예측매출 = model.predict(sample)[0]
 
-    # SHAP 계산
-    explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(sample)
-
-    # 주요 기여도 테아블
-    shap_impact = pd.DataFrame({
-        'Feature': sample.columns,
-        'Feature Value': sample.values.flatten(),
-        'SHAP Value': shap_values.flatten()
-    }).sort_values(by="SHAP Value", key=abs, ascending=False)
-
+    
     # 결과 전달
     return jsonify({
         "상권명": nearest["상권_코드_명"],
         "경쟁수": int(num_competitors),
         "예측매출": int(예측매출),
-        "SHAP": shap_impact.head(5).to_dict(orient="records"),  # 상위 5개만 전달
     })
 
 
