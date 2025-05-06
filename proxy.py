@@ -84,7 +84,9 @@ def predict_sales():
     competition_row = df[
         (df['상권_코드_명'] == nearest['상권_코드_명']) &
         (df['서비스_업종_코드_명'] == indsMclsCd)
-        ].iloc[0]
+        ]
+    if competition_row.empty:
+        return jsonify({"error": "해당 상권에 선택한 업종에 대한 데이터가 없습니다."}), 400
     num_competitors = competition_row['300m내_경쟁_업종_수']
 
     # ✅ 300m 내 매출 데이터가 있는 점포 수
