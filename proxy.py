@@ -55,7 +55,7 @@ def proxy():
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/predict", methods=["POST"])
-def predict_sales():
+def predicted_sales():
 
     # 데이터 로드
     model = joblib.load("0504_xgboost_market_model.pkl")
