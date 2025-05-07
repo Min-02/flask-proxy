@@ -147,6 +147,12 @@ def predict_sales():
 
         # 모델 입력 생성
         prediction = model.predict(features)[0]
+        print("📤 예측 결과 응답:", {
+            "상권명": nearest["상권_코드_명"],
+            "경쟁수": int(num_competitors),
+            "predicted_sales": int(prediction),
+            "신뢰도": confidence
+        })
 
         # 결과 전달
         return jsonify({
