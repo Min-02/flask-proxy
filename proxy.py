@@ -98,7 +98,6 @@ def predicted_sales():
             (df['상권_코드_명'] == nearest['상권_코드_명']) &
             (df['서비스_업종_코드_명'] == category)
         ].iloc[0]
-
         num_competitors = competition_row['300m내_경쟁_업종_수']
 
         # ✅ 300m 내 매출 데이터가 있는 점포 수
@@ -181,7 +180,7 @@ def predicted_sales():
         if num_competitors > 0:         # 0 나눗셈 방지
             prediction /= num_competitors
 
-
+        ptint("위치: ", lat, ion)
         print("📤 예측 결과 응답:", {
             "상권명": nearest["상권_코드_명"],
             "경쟁수": int(num_competitors),
