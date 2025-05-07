@@ -88,7 +88,7 @@ def predicted_sales():
     try:
         encoded_category = label_encoders['서비스_업종_코드_명'].transform([category])[0]
         # 가장 가까운 상권 찾기
-        df['거리'] = apply(
+        df['거리'] = df.apply(
             lambda row: geodesic((lat, lon), (row['위도'], row['경도'])).meters, axis=1)
         nearest = df.loc[df['거리'].idxmin()]
         change_encoded = label_encoders['상권_변화_지표_명'].transform([nearest['상권_변화_지표_명']])[0]
