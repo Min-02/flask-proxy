@@ -180,8 +180,8 @@ def predicted_sales():
         if num_competitors > 0:         # 0 나눗셈 방지
             prediction /= num_competitors
 
-        print("위치: ", lat, lon)
         print("📤 예측 결과 응답:", {
+            "위치": {lat, lon},
             "상권명": nearest["상권_코드_명"],
             "경쟁수": int(num_competitors),
             "predicted_sales": int(prediction),
