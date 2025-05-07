@@ -146,14 +146,14 @@ def predict_sales():
         }])
 
         # 모델 입력 생성
-        prediction = model.predict(input_vector)[0]
+        prediction = model.predict(features)[0]
 
         # 결과 전달
         return jsonify({
             "상권명": nearest["상권_코드_명"],
             "경쟁수": int(num_competitors),
             "predicted_sales": int(prediction),
-            "신뢰도": {confidence},
+            "신뢰도": confidence,
         })
     except Exception as e:
         return jsonify({'message': f"❌ 예측 중 오류 발생: {str(e)}"})
