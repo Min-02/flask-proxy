@@ -140,7 +140,7 @@ def predict_sales():
             '금요일_유동인구_수': nearest.get('금요일_유동인구_수', 0),
             '토요일_유동인구_수': nearest.get('토요일_유동인구_수', 0),
             '일요일_유동인구_수': nearest.get('일요일_유동인구_수', 0),
-            '서비스_업종_코드_명': en_indsMclsNm,
+            '서비스_업종_코드_명': encoded_category,
             '상권_변화_지표_명': change_encoded,
             '300m내_경쟁_업종_수': num_competitors
         }])
@@ -152,7 +152,7 @@ def predict_sales():
         return jsonify({
             "상권명": nearest["상권_코드_명"],
             "경쟁수": int(num_competitors),
-            "예측매출": int(prediction),
+            "predicted_sales": int(prediction),
             "신뢰도": {confidence},
         })
     except Exception as e:
