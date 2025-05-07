@@ -147,6 +147,41 @@ def predicted_sales():
 
         # 모델 입력 생성
         prediction = model.predict(features)[0]
+
+        # ✅ 시간대 정의 (언더바 기반)
+        defined_times = {
+            "시간대_00_06": (0, 6),
+            "시간대_06_11": (6, 11),
+            "시간대_11_14": (11, 14),
+            "시간대_14_17": (14, 17),
+            "시간대_17_21": (17, 21),
+            "시간대_21_24": (21, 24)
+        }
+
+        # ✅ 요일 보정
+        total_weekly_sales = sum([nearest.get(f"{day}요일_매출_금액", 0) for day in ['월', '화', '수', '목', '금', '토', '일']])
+        selected_sales = sum([nearest.get(f"{day}요일_매출_금액", 0) for day in selected_days])
+        if total_weekly_sales > 0:
+            prediction *= (selected_sales / total_weekly_sales)
+
+        # ✅ 시간대 보정
+        total_time_sales = 0
+        selected_time_sales = 0
+        for col, (t_start, t_end) in defined_times.items():
+            overlap = max(0, min(end_time, t_end) - max(start_time, t_start))
+            duration = t_end - t_start
+            sale_amt = nearest.get(f"{col}_매출_금액", 0)
+            total_time_sales += sale_amt
+            if overlap > 0:
+                selected_time_sales += sale_amt * (overlap / duration)
+        if total_time_sales > 0:
+            prediction *= (selected_time_sales / total_time_sales)
+
+        # ✅ 경쟁 점포 수로 나누기
+        if num_competitors > 0:         # 0 나눗셈 방지
+            prediction /= num_competitors
+
+
         print("📤 예측 결과 응답:", {
             "상권명": nearest["상권_코드_명"],
             "경쟁수": int(num_competitors),
