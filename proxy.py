@@ -58,16 +58,14 @@ def proxy():
 def predicted_sales():
 
     # 데이터 로드
-    model = joblib.load("0504_xgboost_market_model.pkl")
-    label_encoders = joblib.load("0504_label_encoders.pkl")
-    df = pd.read_csv("0504_광진구 상권 데이터 통합 완성본.csv", encoding="cp949")
+    model = joblib.load("0509_model.pkl_xgboost_market_model.pkl")
+    label_encoders = joblib.load("0509_encoders.pkl_label_encoders.pkl")
+    df = pd.read_csv("0509_광진구 상권 데이터 통합 완성본.csv", encoding="cp949")
 
     data = request.get_json()
     lat = float(data["lat"])
     lon = float(data["lon"])
     indsMclsCd = data["indsMclsCd"]
-    radius_m = float(data["radius"])
-    radius_km = radius_m / 1000
 
     time_range = data["time_range"]  # 예: "6-14"
     start_time_str, end_time_str = time_range.split("-")
@@ -87,7 +85,8 @@ def predicted_sales():
 
     try:
         encoded_category = label_encoders['서비스_업종_코드_명'].transform([category])[0]
-        # 가장 가까운 상권 찾기
+
+        # ✅ 가장 가까운 상권 찾기
         df['거리'] = df.apply(
             lambda row: geodesic((lat, lon), (row['위도'], row['경도'])).meters, axis=1)
         nearest = df.loc[df['거리'].idxmin()]
@@ -144,7 +143,7 @@ def predicted_sales():
             '300m내_경쟁_업종_수': num_competitors
         }])
 
-        # 모델 입력 생성
+        # ✅ 예측 실행
         prediction = model.predict(features)[0]
 
         # ✅ 시간대 정의 (언더바 기반)
@@ -175,10 +174,6 @@ def predicted_sales():
                 selected_time_sales += sale_amt * (overlap / duration)
         if total_time_sales > 0:
             prediction *= (selected_time_sales / total_time_sales)
-
-        # ✅ 경쟁 점포 수로 나누기
-        if num_competitors > 0:         # 0 나눗셈 방지
-            prediction /= num_competitors
 
         print("📤 예측 결과 응답:", {
             "위치": [lat, lon],
