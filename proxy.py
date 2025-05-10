@@ -58,9 +58,11 @@ def proxy():
 def predicted_sales():
 
     # 데이터 로드
-    model = joblib.load("0509_model.pkl")
-    label_encoders = joblib.load("0509_encoders.pkl")
-    df = pd.read_csv("0509_광진구 상권 데이터 통합 완성본.csv", encoding="cp949")
+    model = joblib.load("0510_model.pkl")
+    label_encoders = joblib.load("0510_encoders.pkl")
+    df = pd.read_csv("0510_광진구 상권, 지하철 통합 완성본.csv", encoding="cp949")
+    df_subway = pd.read_csv("광진구 지하철 평균 승하차 인원 수.csv", encoding="cp949")
+    df_subway = df_subway.dropna(subset=['위도', '경도'])
 
     data = request.get_json()
     lat = float(data["lat"])
@@ -83,8 +85,21 @@ def predicted_sales():
     # ✅ 업종 코드 → 업종명 변환
     category = industry_code_map.get(indsMclsCd)
 
+    def find_nearest_station(user_lat, user_lon):
+        min_dist = float('inf')
+        best_row = None
+        for _, row in df_subway.iterrows():
+            dist = geodesic((user_lat, user_lon), (row['위도'], row['경도'])).meters
+            if dist < min_dist:
+                min_dist = dist
+                best_row = row
+        return f"{best_row['역명']} ({best_row['노선명']})", round(min_dist, 1), best_row['일일_평균_승하차_인원_수']
+
     try:
         encoded_category = label_encoders['서비스_업종_코드_명'].transform([category])[0]
+
+        # ✅ 사용자 위치 기준으로 가장 가까운 지하철 정보 계산
+        nearest_station_name, station_distance, station_traffic = find_nearest_station(lat, lon)
 
         # ✅ 가장 가까운 상권 찾기
         df['거리'] = df.apply(
@@ -105,7 +120,6 @@ def predicted_sales():
             (df['거리'] <= 300) &
             (df['당월_매출_금액'].notna())
         ]
-        num_with_sales = len(nearby_with_sales)
 
         if num_competitors == 0:
             return jsonify({'message': "⚠️ 해당 상권에 해당 업종 점포가 없어 예측이 불가합니다."})
@@ -140,7 +154,9 @@ def predicted_sales():
             '일요일_유동인구_수': nearest.get('일요일_유동인구_수', 0),
             '서비스_업종_코드_명': encoded_category,
             '상권_변화_지표_명': change_encoded,
-            '300m내_경쟁_업종_수': num_competitors
+            '300m내_경쟁_업종_수': num_competitors,
+            '역까지_거리_m': station_distance,
+            '가장_가까운_역_승하차_인원_수': station_traffic
         }])
 
         # ✅ 예측 실행
@@ -178,6 +194,8 @@ def predicted_sales():
         print("📤 예측 결과 응답:", {
             "위치": [lat, lon],
             "상권명": nearest["상권_코드_명"],
+            "인근 지하철역": nearest_station_name,
+            "지하철역 거리": station_distance,
             "경쟁수": int(num_competitors),
             "predicted_sales": int(prediction),
             "신뢰도": confidence
@@ -186,6 +204,9 @@ def predicted_sales():
         # 결과 전달
         return jsonify({
             "상권명": nearest["상권_코드_명"],
+            "지하철역": nearest_station_name,
+            "지하철역거리": station_distance,
+            "일일승하차": int(station_traffic),
             "경쟁수": int(num_competitors),
             "predicted_sales": int(prediction),
             "신뢰도": confidence,
