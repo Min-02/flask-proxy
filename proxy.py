@@ -60,8 +60,8 @@ def predicted_sales():
     # 데이터 로드
     model = joblib.load("0510_model.pkl")
     label_encoders = joblib.load("0510_encoders.pkl")
-    df = pd.read_csv("0510_광진구 상권, 지하철 통합 완성본.csv", encoding="cp949")
-    df_subway = pd.read_csv("광진구 지하철 평균 승하차 인원 수.csv", encoding="utf-8-sig")
+    df = pd.read_csv("0510_광진구 상권, 지하철 통합 완성본.csv", encoding="utf-8-sig")
+    df_subway = pd.read_csv("광진구 지하철 평균 승하차 인원 수.csv", encoding="cp949")
     df_subway = df_subway.dropna(subset=['위도', '경도'])
 
     data = request.get_json()
