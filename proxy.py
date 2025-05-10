@@ -58,8 +58,8 @@ def proxy():
 def predicted_sales():
 
     # 데이터 로드
-    model = joblib.load("0509_model.pkl_xgboost_market_model.pkl")
-    label_encoders = joblib.load("0509_encoders.pkl_label_encoders.pkl")
+    model = joblib.load("0509_model.pkl")
+    label_encoders = joblib.load("0509_encoders.pkl")
     df = pd.read_csv("0509_광진구 상권 데이터 통합 완성본.csv", encoding="cp949")
 
     data = request.get_json()
