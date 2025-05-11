@@ -58,8 +58,12 @@ def proxy():
 def predicted_sales():
 
     # 데이터 로드
-    model = joblib.load("0510_model.pkl")
-    label_encoders = joblib.load("0510_encoders.pkl")
+    model_paths = {
+        "한식음식점": "0511_model_한식중식_통합.pkl",
+        "중식음식점": "0511_model_한식중식_통합.pkl",
+        "커피-음료": "0511_model_커피_음료.pkl"
+    }
+    label_encoders = joblib.load("0511_encoders.pkl")
     df = pd.read_csv("0510_광진구 상권, 지하철 통합 완성본.csv", encoding="utf-8-sig")
     df_subway = pd.read_csv("광진구 지하철 평균 승하차 인원 수.csv", encoding="cp949")
     df_subway = df_subway.dropna(subset=['위도', '경도'])
@@ -105,7 +109,14 @@ def predicted_sales():
         df['거리'] = df.apply(
             lambda row: geodesic((lat, lon), (row['위도'], row['경도'])).meters, axis=1)
         nearest = df.loc[df['거리'].idxmin()]
-        change_encoded = label_encoders['상권_변화_지표_명'].transform([nearest['상권_변화_지표_명']])[0]
+        if category in ['한식음식점', '중식음식점']:
+            change_encoder = label_encoders['상권_변화_지표_명']['한식중식_통합']
+        else:
+            change_encoder = label_encoders['상권_변화_지표_명']['커피_음료']
+        change_encoded = change_encoder.transform([nearest['상권_변화_지표_명']])[0]
+
+        # ✅ 모델 로딩
+        model = joblib.load(model_paths[category])
 
         # ✅ 상권 + 업종 기준으로 경쟁 업종 수 추출
         competition_row = df[
@@ -120,16 +131,17 @@ def predicted_sales():
             (df['거리'] <= 300) &
             (df['당월_매출_금액'].notna())
         ]
+        num_with_sales = len(nearby_with_sales)
 
         if num_competitors == 0:
             return jsonify({'message': "⚠️ 해당 상권에 해당 업종 점포가 없어 예측이 불가합니다."})
-        elif num_competitors < 3 or len(nearby_with_sales) == 0:
+        elif num_competitors < 3 or num_with_sales == 0:
             confidence = "⚠️ 이 상권의 해당 업종 혹은 매출 데이터가 부족하여 신뢰도가 낮습니다."
         else:
             confidence = "✅ 신뢰도 양호"
 
         # ✅ 입력 벡터 구성
-        features = pd.DataFrame([{
+        input_data = pd.DataFrame([{
             '총_유동인구_수': nearest['총_유동인구_수'],
             '남성_유동인구_수': nearest['남성_유동인구_수'],
             '여성_유동인구_수': nearest['여성_유동인구_수'],
@@ -158,9 +170,25 @@ def predicted_sales():
             '역까지_거리_m': station_distance,
             '가장_가까운_역_승하차_인원_수': station_traffic
         }])
+        # 🔹 파생 피처 추가
+        input_data['남성_비율'] = input_data['남성_유동인구_수'] / (input_data['총_유동인구_수'] + 1)
+        input_data['여성_비율'] = input_data['여성_유동인구_수'] / (input_data['총_유동인구_수'] + 1)
+        input_data['연령대_중심값'] = (
+            input_data['연령대_10_유동인구_수'] * 10 +
+            input_data['연령대_20_유동인구_수'] * 20 +
+            input_data['연령대_30_유동인구_수'] * 30 +
+            input_data['연령대_40_유동인구_수'] * 40 +
+            input_data['연령대_50_유동인구_수'] * 50 +
+            input_data['연령대_60_이상_유동인구_수'] * 65
+        ) / (input_data['총_유동인구_수'] + 1)
+        input_data['경쟁_밀집도'] = input_data['300m내_경쟁_업종_수'] / (input_data['총_유동인구_수'] + 1)
+        input_data['역_접근성'] = input_data['가장_가까운_역_승하차_인원_수'] / (input_data['역까지_거리_m'] + 1)
+
+        # 🔹 불필요한 피처 제거
+        input_data = input_data.drop(columns=['서비스_업종_코드_명'])
 
         # ✅ 예측 실행
-        prediction = model.predict(features)[0]
+        prediction = model.predict(input_data)[0]
 
         # ✅ 시간대 정의 (언더바 기반)
         defined_times = {
