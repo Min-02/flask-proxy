@@ -200,14 +200,16 @@ def predicted_sales():
             "시간대_17_21": (17, 21),
             "시간대_21_24": (21, 24)
         }
-        print("예측 매출", prediction) #####
+
         # ✅ 요일 보정
         total_weekly_sales = sum([nearest.get(f"{day}요일_매출_금액", 0) for day in ['월', '화', '수', '목', '금', '토', '일']])
         selected_sales = sum([nearest.get(f"{day}요일_매출_금액", 0) for day in selected_days])
         if total_weekly_sales > 0:
             prediction *= (selected_sales / total_weekly_sales)
+        print("전체요일매출",total_weekly_sales)
+        print("선택요일매출", selected_sales)
         print("요일 예측 매출", prediction)  #####
-        # ✅ 시간대 보정
+        # ✅ 시간대 보정 (기여도 기준으로 수정)
         total_time_sales = 0
         selected_time_sales = 0
         for col, (t_start, t_end) in defined_times.items():
