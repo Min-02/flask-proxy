@@ -135,6 +135,7 @@ def predicted_sales():
 
         if num_competitors == 0:
             return jsonify({'message': "⚠️ 해당 상권에 해당 업종 점포가 없어 예측이 불가합니다."})
+            exit()
         elif num_competitors < 3 or num_with_sales == 0:
             confidence = "⚠️ 이 상권의 해당 업종 혹은 매출 데이터가 부족하여 신뢰도가 낮습니다."
         else:
@@ -199,13 +200,13 @@ def predicted_sales():
             "시간대_17_21": (17, 21),
             "시간대_21_24": (21, 24)
         }
-
+        print("예측 매출", prediction) #####
         # ✅ 요일 보정
         total_weekly_sales = sum([nearest.get(f"{day}요일_매출_금액", 0) for day in ['월', '화', '수', '목', '금', '토', '일']])
         selected_sales = sum([nearest.get(f"{day}요일_매출_금액", 0) for day in selected_days])
         if total_weekly_sales > 0:
             prediction *= (selected_sales / total_weekly_sales)
-
+        print("요일 예측 매출", prediction)  #####
         # ✅ 시간대 보정
         total_time_sales = 0
         selected_time_sales = 0
@@ -218,7 +219,7 @@ def predicted_sales():
                 selected_time_sales += sale_amt * (overlap / duration)
         if total_time_sales > 0:
             prediction *= (selected_time_sales / total_time_sales)
-
+        print("시간 예측 매출", prediction)  #####
         print("📤 예측 결과 응답:", {
             "위치": [lat, lon],
             "상권명": nearest["상권_코드_명"],
@@ -226,6 +227,7 @@ def predicted_sales():
             "지하철역 거리": station_distance,
             "경쟁수": int(num_competitors),
             "predicted_sales": int(prediction),
+            "predicted_sales2": prediction, #####
             "신뢰도": confidence
         })
 
