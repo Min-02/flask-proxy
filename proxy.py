@@ -206,10 +206,7 @@ def predicted_sales():
         selected_sales = sum([nearest.get(f"{day}요일_매출_금액", 0) for day in selected_days])
         if total_weekly_sales > 0:
             prediction *= (selected_sales / total_weekly_sales)
-        print("전체요일매출",total_weekly_sales)
-        print("선택요일매출", selected_sales)
-        print("selected_days", selected_days)
-        print("요일 예측 매출", prediction)  #####
+
         # ✅ 시간대 보정 (기여도 기준으로 수정)
         total_time_sales = 0
         selected_time_sales = 0
@@ -222,7 +219,7 @@ def predicted_sales():
                 selected_time_sales += sale_amt * (overlap / duration)
         if total_time_sales > 0:
             prediction *= (selected_time_sales / total_time_sales)
-        print("시간 예측 매출", prediction)  #####
+
         print("📤 예측 결과 응답:", {
             "위치": [lat, lon],
             "상권명": nearest["상권_코드_명"],
