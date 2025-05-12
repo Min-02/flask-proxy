@@ -208,6 +208,7 @@ def predicted_sales():
             prediction *= (selected_sales / total_weekly_sales)
         print("전체요일매출",total_weekly_sales)
         print("선택요일매출", selected_sales)
+        print("selected_days", selected_days)
         print("요일 예측 매출", prediction)  #####
         # ✅ 시간대 보정 (기여도 기준으로 수정)
         total_time_sales = 0
