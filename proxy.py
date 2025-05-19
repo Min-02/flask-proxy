@@ -1,17 +1,17 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import pandas as pd
+import numpy as np
 from urllib.parse import urlencode
-import matplotlib.pyplot as plt
 from geopy.distance import geodesic
+from sklearn.neighbors import BallTree
+import importlib.util
 import urllib3
+import math
 import ssl
 import json
 import joblib
-import shap
-import io
 import os
-import base64
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -56,18 +56,97 @@ def proxy():
 
 @app.route("/api/predict", methods=["POST"])
 def predicted_sales():
+    # 📦 보정 로직 불러오기
+    spec = importlib.util.spec_from_file_location("bojeong", "보정로직_서비스구조_정합버전.py")
+    bojeong = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bojeong)
+    get_sales_distribution_basis = bojeong.get_sales_distribution_basis
+    apply_temporal_corrections = bojeong.apply_temporal_corrections
 
-    # 데이터 로드
+    # 📂 모델 및 입력 피처 예측값 불러오기
     model_paths = {
-        "한식음식점": "0511_model_한식중식_통합.pkl",
-        "중식음식점": "0511_model_한식중식_통합.pkl",
-        "커피-음료": "0511_model_커피_음료.pkl"
+        "한식음식점": "0518_model_Korean_Chinese.pkl",
+        "중식음식점": "0518_model_Korean_Chinese.pkl",
+        "커피-음료": "0518_model_Cafe_Beverage.pkl"
     }
-    label_encoders = joblib.load("0511_encoders.pkl")
-    df = pd.read_csv("0510_광진구 상권, 지하철 통합 완성본.csv", encoding="utf-8-sig")
-    df_subway = pd.read_csv("광진구 지하철 평균 승하차 인원 수.csv", encoding="cp949")
-    df_subway = df_subway.dropna(subset=['위도', '경도'])
+    label_encoders = joblib.load("0518_encoders.pkl")
+    feature_df = pd.read_csv("2025_input_vector.csv")
 
+    # 📂 데이터셋 로드 함수 정의
+    def load_dataframe(path):
+        try:
+            return pd.read_csv(path, encoding='cp949')
+        except UnicodeDecodeError:
+            return pd.read_csv(path, encoding='utf-8-sig')
+
+    # 📂 데이터 로딩
+    df = load_dataframe("0510_광진구 상권, 지하철 통합 완성본.csv")
+    df_subway = load_dataframe("광진구 지하철 평균 승하차 인원 수.csv").dropna(subset=["위도", "경도"])
+
+    # 📌 기준분기 추가 (예: 20244)
+    df["기준분기"] = df["기준_년분기_코드"].astype(str).str[:4].astype(int) * 10 + df["기준_년분기_코드"].astype(str).str[-1].astype(int)
+
+    # 📍 BallTree 구축 (위치 기반 최근 상권 탐색용)
+    coords_rad = np.radians(df[["위도", "경도"]])
+    tree = BallTree(coords_rad, metric="haversine")
+
+    # 🔹 위도/경도 기준 거리 이동 보정 함수
+    def offset_latlon(lat, lon, dy_m, dx_m):
+        delta_lat = dy_m / 111000
+        delta_lon = dx_m / (111000 * math.cos(math.radians(lat)))
+        return lat + delta_lat, lon + delta_lon
+
+    # 🔹 가장 가까운 지하철역 찾기
+    def find_nearest_station(lat, lon):
+        best_row = df_subway.iloc[((df_subway["위도"] - lat) ** 2 + (df_subway["경도"] - lon) ** 2).idxmin()]
+        dist = geodesic((lat, lon), (best_row["위도"], best_row["경도"])).meters
+        name = f"{best_row['역명']} ({best_row['노선명']})"
+        traffic = best_row["일일_평균_승하차_인원_수"]
+        return name, dist, traffic
+
+    # 🔹 가장 가까운 상권 탐색
+    def find_nearest_area(lat, lon):
+        query_rad = np.radians([[lat, lon]])
+        dist, idx = tree.query(query_rad, k=1)
+        nearest = df.iloc[idx[0][0]]
+        return nearest, dist[0][0] * 6371000
+
+    # 🔹 상권 코드로 입력 피처 예측 벡터 불러오기
+    def load_predicted_vector(area_code: int) -> dict:
+        row = feature_df[feature_df["상권_코드"] == area_code]
+        if row.empty:
+            raise ValueError(f"❌ 상권 코드 {area_code} 에 해당하는 예측 피처 없음")
+        return row.iloc[0].to_dict()
+
+    # ✅ 파생 피처 생성 함수 (안전 버전)
+    def add_derived_features(df):
+        df = df.copy()
+        df["남성_비율"] = df["남성_유동인구_수"] / (df["총_유동인구_수"] + 1)
+        df["여성_비율"] = df["여성_유동인구_수"] / (df["총_유동인구_수"] + 1)
+        df["연령대_중심값"] = (
+            df["연령대_10_유동인구_수"] * 10 +
+            df["연령대_20_유동인구_수"] * 20 +
+            df["연령대_30_유동인구_수"] * 30 +
+            df["연령대_40_유동인구_수"] * 40 +
+            df["연령대_50_유동인구_수"] * 50 +
+            df["연령대_60_이상_유동인구_수"] * 65
+        ) / (df["총_유동인구_수"] + 1)
+        df["상주대비_유동비"] = df["총_유동인구_수"] / (df["총_상주인구_수"] + 1)
+        df["직장대비_유동비"] = df["총_유동인구_수"] / (df["총_직장_인구_수"] + 1)
+        if "운영_영업_개월_평균" in df.columns and "서울_운영_영업_개월_평균" in df.columns:
+            df["상권_vs_서울_운영차"] = df["운영_영업_개월_평균"] - df["서울_운영_영업_개월_평균"]
+        else:
+            df["상권_vs_서울_운영차"] = np.nan
+
+        if "폐업_영업_개월_평균" in df.columns and "서울_폐업_영업_개월_평균" in df.columns:
+            df["상권_vs_서울_폐업차"] = df["폐업_영업_개월_평균"] - df["서울_폐업_영업_개월_평균"]
+        else:
+            df["상권_vs_서울_폐업차"] = np.nan
+        df["경쟁_밀집도"] = df["300m내_경쟁_업종_수"] / (df["총_유동인구_수"] + 1)
+        df["역_접근성"] = df["가장_가까운_역_승하차_인원_수"] / (df["역까지_거리_m"] + 1)
+        return df
+
+    # 입력된 데이터
     data = request.get_json()
     lat = float(data["lat"])
     lon = float(data["lon"])
@@ -89,158 +168,213 @@ def predicted_sales():
     # ✅ 업종 코드 → 업종명 변환
     category = industry_code_map.get(indsMclsCd)
 
-    def find_nearest_station(user_lat, user_lon):
-        min_dist = float('inf')
-        best_row = None
-        for _, row in df_subway.iterrows():
-            dist = geodesic((user_lat, user_lon), (row['위도'], row['경도'])).meters
-            if dist < min_dist:
-                min_dist = dist
-                best_row = row
-        return f"{best_row['역명']} ({best_row['노선명']})", round(min_dist, 1), best_row['일일_평균_승하차_인원_수']
+    print(lat, lon, start_time, end_time, selected_days, category, indsMclsCd)
 
     try:
-        encoded_category = label_encoders['서비스_업종_코드_명'].transform([category])[0]
+        # 📍 입력 위치 기준 상권/지하철 분석
+        nearest, _ = find_nearest_area(lat, lon)
+        station_name, station_dist, station_traffic = find_nearest_station(lat, lon)
 
-        # ✅ 사용자 위치 기준으로 가장 가까운 지하철 정보 계산
-        nearest_station_name, station_distance, station_traffic = find_nearest_station(lat, lon)
+        change_encoder = (
+            label_encoders["상권_변화_지표_명"]["커피_음료"]
+            if "커피" in category else label_encoders["상권_변화_지표_명"]["한식중식_통합"]
+        )
+        change_encoded = change_encoder.transform([nearest["상권_변화_지표_명"]])[0]
 
-        # ✅ 가장 가까운 상권 찾기
-        df['거리'] = df.apply(
-            lambda row: geodesic((lat, lon), (row['위도'], row['경도'])).meters, axis=1)
-        nearest = df.loc[df['거리'].idxmin()]
-        if category in ['한식음식점', '중식음식점']:
-            change_encoder = label_encoders['상권_변화_지표_명']['한식중식_통합']
-        else:
-            change_encoder = label_encoders['상권_변화_지표_명']['커피_음료']
-        change_encoded = change_encoder.transform([nearest['상권_변화_지표_명']])[0]
-
-        # ✅ 모델 로딩
         model = joblib.load(model_paths[category])
+        df_basis = get_sales_distribution_basis(df, nearest["상권_코드_명"], category)
+        df_basis = df_basis.dropna(subset=["점포_당_매출_금액"])
 
-        # ✅ 상권 + 업종 기준으로 경쟁 업종 수 추출
-        competition_row = df[
-            (df['상권_코드_명'] == nearest['상권_코드_명']) &
-            (df['서비스_업종_코드_명'] == category)
-        ].iloc[0]
-        num_competitors = competition_row['300m내_경쟁_업종_수']
+        # 📌 예측 불가능한 조건 처리
+        if len(df_basis) == 0:
+            print(f"\n📍 가장 가까운 상권: {nearest['상권_코드_명']}")
+            print(f"🧾 업종: {category}")
+            print("\n❌ 예측 불가: 해당 상권+업종 조합에 대한 매출 데이터가 존재하지 않아 예측할 수 없습니다.")
+            print("\n📍 신뢰할 수 있는 주변 위치 분석 중...")
+            base_sales = None
+            return jsonify({
+                "error": "해당 상권+업종 조합에 대한 매출 데이터가 없어 예측할 수 없습니다."
+            }), 400
 
-        # ✅ 300m 내 매출 데이터가 있는 점포 수
-        nearby_with_sales = df[
-            (df['서비스_업종_코드_명'] == category) &
-            (df['거리'] <= 300) &
-            (df['당월_매출_금액'].notna())
-        ]
-        num_with_sales = len(nearby_with_sales)
-
-        if num_competitors == 0:
-            return jsonify({'message': "⚠️ 해당 상권에 해당 업종 점포가 없어 예측이 불가합니다."})
-            exit()
-        elif num_competitors < 3 or num_with_sales == 0:
-            confidence = "⚠️ 이 상권의 해당 업종 혹은 매출 데이터가 부족하여 신뢰도가 낮습니다."
         else:
-            confidence = "✅ 신뢰도 양호"
+            if len(df_basis) <= 3:
+                print(f"\n📍 가장 가까운 상권: {nearest['상권_코드_명']}")
+                print(f"🧾 업종: {category}")
+                print("\n⚠️ 참고: 해당 상권+업종 조합은 매출 데이터가 3개 이하로, 예측 결과의 신뢰도가 낮을 수 있습니다.")
 
-        # ✅ 입력 벡터 구성
-        input_data = pd.DataFrame([{
-            '총_유동인구_수': nearest['총_유동인구_수'],
-            '남성_유동인구_수': nearest['남성_유동인구_수'],
-            '여성_유동인구_수': nearest['여성_유동인구_수'],
-            '연령대_10_유동인구_수': nearest.get('연령대_10_유동인구_수', 0),
-            '연령대_20_유동인구_수': nearest.get('연령대_20_유동인구_수', 0),
-            '연령대_30_유동인구_수': nearest.get('연령대_30_유동인구_수', 0),
-            '연령대_40_유동인구_수': nearest.get('연령대_40_유동인구_수', 0),
-            '연령대_50_유동인구_수': nearest.get('연령대_50_유동인구_수', 0),
-            '연령대_60_이상_유동인구_수': nearest.get('연령대_60_이상_유동인구_수', 0),
-            '시간대_00_06_유동인구_수': nearest.get('시간대_00_06_유동인구_수', 0),
-            '시간대_06_11_유동인구_수': nearest.get('시간대_06_11_유동인구_수', 0),
-            '시간대_11_14_유동인구_수': nearest.get('시간대_11_14_유동인구_수', 0),
-            '시간대_14_17_유동인구_수': nearest.get('시간대_14_17_유동인구_수', 0),
-            '시간대_17_21_유동인구_수': nearest.get('시간대_17_21_유동인구_수', 0),
-            '시간대_21_24_유동인구_수': nearest.get('시간대_21_24_유동인구_수', 0),
-            '월요일_유동인구_수': nearest.get('월요일_유동인구_수', 0),
-            '화요일_유동인구_수': nearest.get('화요일_유동인구_수', 0),
-            '수요일_유동인구_수': nearest.get('수요일_유동인구_수', 0),
-            '목요일_유동인구_수': nearest.get('목요일_유동인구_수', 0),
-            '금요일_유동인구_수': nearest.get('금요일_유동인구_수', 0),
-            '토요일_유동인구_수': nearest.get('토요일_유동인구_수', 0),
-            '일요일_유동인구_수': nearest.get('일요일_유동인구_수', 0),
-            '서비스_업종_코드_명': encoded_category,
-            '상권_변화_지표_명': change_encoded,
-            '300m내_경쟁_업종_수': num_competitors,
-            '역까지_거리_m': station_distance,
-            '가장_가까운_역_승하차_인원_수': station_traffic
-        }])
-        # 🔹 파생 피처 추가
-        input_data['남성_비율'] = input_data['남성_유동인구_수'] / (input_data['총_유동인구_수'] + 1)
-        input_data['여성_비율'] = input_data['여성_유동인구_수'] / (input_data['총_유동인구_수'] + 1)
-        input_data['연령대_중심값'] = (
-            input_data['연령대_10_유동인구_수'] * 10 +
-            input_data['연령대_20_유동인구_수'] * 20 +
-            input_data['연령대_30_유동인구_수'] * 30 +
-            input_data['연령대_40_유동인구_수'] * 40 +
-            input_data['연령대_50_유동인구_수'] * 50 +
-            input_data['연령대_60_이상_유동인구_수'] * 65
-        ) / (input_data['총_유동인구_수'] + 1)
-        input_data['경쟁_밀집도'] = input_data['300m내_경쟁_업종_수'] / (input_data['총_유동인구_수'] + 1)
-        input_data['역_접근성'] = input_data['가장_가까운_역_승하차_인원_수'] / (input_data['역까지_거리_m'] + 1)
+            # ✅ 입력 피처 구성
+            input_vec = load_predicted_vector(nearest["상권_코드"])
+            input_vec["300m내_경쟁_업종_수"] = nearest["300m내_경쟁_업종_수"]
+            input_vec["역까지_거리_m"] = station_dist
+            input_vec["가장_가까운_역_승하차_인원_수"] = station_traffic
+            input_vec["상권_변화_지표_명"] = int(change_encoded)
 
-        # 🔹 불필요한 피처 제거
-        input_data = input_data.drop(columns=['서비스_업종_코드_명'])
+            # ✅ 누락 피처 보완
+            needed_cols = [
+                "운영_영업_개월_평균", "폐업_영업_개월_평균",
+                "서울_운영_영업_개월_평균", "서울_폐업_영업_개월_평균"
+            ]
+            recent_row = df[
+                (df["기준분기"] == 20244) &
+                (df["상권_코드"].astype(int) == int(nearest["상권_코드"])) &
+                (df["서비스_업종_코드_명"] == category)
+                ]
+            if not recent_row.empty:
+                for col in needed_cols:
+                    if col not in input_vec:
+                        input_vec[col] = recent_row.iloc[0].get(col, np.nan)
+            else:
+                for col in needed_cols:
+                    input_vec[col] = np.nan
 
-        # ✅ 예측 실행
-        prediction = model.predict(input_data)[0]
+            # ✅ 파생 피처 포함 입력 데이터프레임 구성 및 예측
+            input_df = pd.DataFrame([input_vec])
+            input_df = add_derived_features(input_df)
+            input_df = input_df[model.feature_names_in_]
 
-        # ✅ 시간대 정의 (언더바 기반)
-        defined_times = {
-            "시간대_00_06": (0, 6),
-            "시간대_06_11": (6, 11),
-            "시간대_11_14": (11, 14),
-            "시간대_14_17": (14, 17),
-            "시간대_17_21": (17, 21),
-            "시간대_21_24": (21, 24)
-        }
+            predicted_sales = model.predict(input_df)[0]
+            predicted_sales = apply_temporal_corrections(predicted_sales, df_basis, selected_days, start_time, end_time)
+            base_sales = predicted_sales
 
-        # ✅ 요일 보정
-        total_weekly_sales = sum([nearest.get(f"{day}요일_매출_금액", 0) for day in ['월', '화', '수', '목', '금', '토', '일']])
-        selected_sales = sum([nearest.get(f"{day}요일_매출_금액", 0) for day in selected_days])
-        if total_weekly_sales > 0:
-            prediction *= (selected_sales / total_weekly_sales)
+            base_result = {"lat": lat, "lon": lon, "sales": int(predicted_sales),
+                           "상권명": nearest["상권_코드_명"],
+                           "지하철역": station_name,
+                           "지하철역거리": int(station_dist),
+                           "승하차": int(station_traffic)
+                           }
 
-        # ✅ 시간대 보정 (기여도 기준으로 수정)
-        total_time_sales = 0
-        selected_time_sales = 0
-        for col, (t_start, t_end) in defined_times.items():
-            overlap = max(0, min(end_time, t_end) - max(start_time, t_start))
-            duration = t_end - t_start
-            sale_amt = nearest.get(f"{col}_매출_금액", 0)
-            total_time_sales += sale_amt
-            if overlap > 0:
-                selected_time_sales += sale_amt * (overlap / duration)
-        if total_time_sales > 0:
-            prediction *= (selected_time_sales / total_time_sales)
+            print(f"\n📍 가장 가까운 상권: {nearest['상권_코드_명']}")
+            print(f"🚇 가장 가까운 지하철역: {station_name} (거리: {station_dist:.1f}m, 일일 승하차: {int(station_traffic):,}명)")
+            print(f"🕒 영업 시간: {start_time}시 ~ {end_time}시")
+            print(f"📆 영업 요일: {', '.join(selected_days)}")
+            print(f"💰 예측 월 매출: 약 {int(predicted_sales):,}원 (기준 100%)")
+            print("\n📍 신뢰할 수 있는 주변 위치 분석 중...")
 
-        print("📤 예측 결과 응답:", {
-            "위치": [lat, lon],
-            "상권명": nearest["상권_코드_명"],
-            "인근 지하철역": nearest_station_name,
-            "지하철역 거리": station_distance,
-            "경쟁수": int(num_competitors),
-            "predicted_sales": int(prediction),
-            "predicted_sales2": prediction, #####
-            "신뢰도": confidence
-        })
+        results = []
 
-        # 결과 전달
+        if base_sales is not None:
+            for dy in range(-300, 301, 30):
+                for dx in range(-300, 301, 30):
+                    adj_lat, adj_lon  = offset_latlon(lat, lon, dy, dx)
+                    dist = geodesic((lat, lon), (adj_lat, adj_lon )).meters
+                    if dist <= 300:
+                        if abs(adj_lat - lat) < 1e-6 and abs(adj_lon - lon) < 1e-6:
+                            continue
+
+                        near, _ = find_nearest_area(adj_lat, adj_lon)
+                        try:
+                            input_vec = load_predicted_vector(near["상권_코드"])
+                        except Exception:
+                            continue
+
+                        df_basis_near = get_sales_distribution_basis(df, near["상권_코드_명"], category)
+                        df_basis_near = df_basis_near.dropna(subset=["점포_당_매출_금액"])
+                        if len(df_basis_near) < 4:
+                            continue
+
+                        stat_name, stat_d, stat_t = find_nearest_station(adj_lat, adj_lon)
+                        chg_enc = change_encoder.transform([near["상권_변화_지표_명"]])[0]
+
+                        input_vec["역까지_거리_m"] = stat_d
+                        input_vec["가장_가까운_역_승하차_인원_수"] = stat_t
+                        input_vec["상권_변화_지표_명"] = int(chg_enc)
+                        input_vec["300m내_경쟁_업종_수"] = near["300m내_경쟁_업종_수"]
+
+                        # ✅ 누락 피처 보완
+                        recent_row = df[
+                            (df["기준분기"] == 20244) &
+                            (df["상권_코드"].astype(int) == int(near["상권_코드"])) &
+                            (df["서비스_업종_코드_명"] == category)
+                            ]
+                        if not recent_row.empty:
+                            for col in needed_cols:
+                                if col not in input_vec:
+                                    input_vec[col] = recent_row.iloc[0].get(col, np.nan)
+                        else:
+                            for col in needed_cols:
+                                input_vec[col] = np.nan
+
+                        input_df = pd.DataFrame([input_vec])
+                        input_df = add_derived_features(input_df)
+                        input_df = input_df[model.feature_names_in_]
+
+                        sales = model.predict(input_df)[0]
+                        sales = apply_temporal_corrections(sales, df_basis_near, selected_days, start_time, end_time)
+                        percent = round(sales / base_sales * 100) if base_sales else None
+
+                        results.append({
+                            "lat": adj_lat, "lon": adj_lon, "dist": int(dist), "sales": int(sales),
+                            "percent": percent, "상권명": near["상권_코드_명"],
+                            "지하철역": stat_name, "지하철역거리": int(stat_d), "승하차": int(stat_t)
+                        })
+
+        # 🔹 추천 결과 출력
+        final_recommendations = []
+        ranked_output = []
+        if results:
+            results_sorted = sorted(results, key=lambda x: -x["sales"])
+            rank = 1
+            i = 0
+            printed_ranks = 0
+
+            while i < len(results_sorted) and printed_ranks < 3:
+                current_group = [results_sorted[i]]
+                current_sales = results_sorted[i]["sales"]
+                i += 1
+                while i < len(results_sorted) and abs(results_sorted[i]["sales"] - current_sales) <= 1_000_000:
+                    current_group.append(results_sorted[i])
+                    i += 1
+
+                group_percent = (
+                    f"(입력 위치 대비: {round(current_sales / base_sales * 100)}%)"
+                    if base_sales else ""
+                )
+                title = (
+                    f"🔸 공동 {rank}위 (약 {int(current_sales):,}원 {group_percent})"
+                    if len(current_group) > 1 else
+                    f"{rank}위 (약 {int(current_sales):,}원 {group_percent})"
+                )
+                print(f"\n{title}\n")
+
+                group_result = {
+                    "순위": rank,
+                    "매출": int(current_sales),
+                    "퍼센트": group_percent,
+                    "공동": len(current_group) > 1,
+                    "추천지": []
+                }
+
+                for loc in current_group[:3]:
+                    print(f"🛍️ 상권: {loc['상권명']}")
+                    print(f"📍 위치: 위도 {loc['lat']:.6f}, 경도 {loc['lon']:.6f}, 거리 {loc['dist']}m")
+                    print(f"🚇 지하철: {loc['지하철역']} / 거리: {loc['지하철역거리']}m / 승하차: {loc['승하차']:,}명\n")
+
+                    group_result["추천지"].append({
+                        "상권명": loc["상권명"],
+                        "lat": loc["lat"],
+                        "lon": loc["lon"],
+                        "거리": loc["dist"],
+                        "지하철역": loc["지하철역"],
+                        "지하철역거리": loc["지하철역거리"],
+                        "승하차": loc["승하차"],
+                        "예상매출": loc["sales"]
+                    })
+                final_recommendations.append(loc)
+                ranked_output.append(group_result)
+                printed_ranks += 1
+                rank += 1
+        else:
+            print("\n✅ 주변에 더 나은 위치는 없습니다.")
+
+        print("입력위치", base_result)
+        print("추천위치", len(final_recommendations), ranked_output)
+        print("추천순위", len(ranked_output), ranked_output)
+
         return jsonify({
-            "상권명": nearest["상권_코드_명"],
-            "지하철역": nearest_station_name,
-            "지하철역거리": station_distance,
-            "일일승하차": int(station_traffic),
-            "경쟁수": int(num_competitors),
-            "predicted_sales": int(prediction),
-            "신뢰도": confidence,
-        })
+            "입력위치": base_result,
+            "추천위치": final_recommendations,
+            "추천순위": ranked_output
+            })
     except Exception as e:
         return jsonify({'message': f"❌ 예측 중 오류 발생: {str(e)}"})
 
