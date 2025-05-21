@@ -65,12 +65,12 @@ def predicted_sales():
 
     # 📂 모델 및 입력 피처 예측값 불러오기
     model_paths = {
-        "한식음식점": "0518_model_Korean_Chinese.pkl",
-        "중식음식점": "0518_model_Korean_Chinese.pkl",
-        "커피-음료": "0518_model_Cafe_Beverage.pkl"
+        "한식음식점": "0520_model_Korean_Chinese.pkl",
+        "중식음식점": "0520_model_Korean_Chinese.pkl",
+        "커피-음료": "0520_model_Cafe_Beverage.pkl"
     }
-    label_encoders = joblib.load("0518_encoders.pkl")
-    feature_df = pd.read_csv("2025_input_vector.csv")
+    label_encoders = joblib.load("0520_encoders.pkl")
+    feature_df = pd.read_csv("20252_input_vector_0521.csv")
 
     # 📂 데이터셋 로드 함수 정의
     def load_dataframe(path):
@@ -157,6 +157,7 @@ def predicted_sales():
     start_time = int(start_time_str)
     end_time = int(end_time_str)
     selected_days = data["day_of_week"]
+    store_count = int(data["store_count"])
 
     # 코드 → 업종명 매핑
     industry_code_map = {
@@ -204,10 +205,13 @@ def predicted_sales():
 
             # ✅ 입력 피처 구성
             input_vec = load_predicted_vector(nearest["상권_코드"])
-            input_vec["300m내_경쟁_업종_수"] = nearest["300m내_경쟁_업종_수"]
             input_vec["역까지_거리_m"] = station_dist
             input_vec["가장_가까운_역_승하차_인원_수"] = station_traffic
             input_vec["상권_변화_지표_명"] = int(change_encoded)
+            if store_count is not None:
+                input_vec["300m내_경쟁_업종_수"] = store_count
+            else:
+                input_vec["300m내_경쟁_업종_수"] = nearest["300m내_경쟁_업종_수"]  # fallback
 
             # ✅ 누락 피처 보완
             needed_cols = [
@@ -293,6 +297,12 @@ def predicted_sales():
                         else:
                             for col in needed_cols:
                                 input_vec[col] = np.nan
+
+                        # 🔹 계절성 피처 삽입
+                        input_vec["연도"] = 2025
+                        input_vec["분기"] = 2
+                        input_vec["분기_sin"] = np.sin(2 * np.pi * 2 / 4)
+                        input_vec["분기_cos"] = np.cos(2 * np.pi * 2 / 4)
 
                         input_df = pd.DataFrame([input_vec])
                         input_df = add_derived_features(input_df)
