@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import pandas as pd
 import numpy as np
@@ -6,13 +6,18 @@ from urllib.parse import urlencode
 from geopy.distance import geodesic
 from sklearn.neighbors import BallTree
 import importlib.util
+import matplotlib.pyplot as plt
+import matplotlib
+import matplotlib.font_manager as fm
 import urllib3
 import math
 import ssl
 import json
 import joblib
 import os
+import io
 
+matplotlib.use('Agg')
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
@@ -387,6 +392,55 @@ def predicted_sales():
             })
     except Exception as e:
         return jsonify({'message': f"❌ 예측 중 오류 발생: {str(e)}"})
+
+@app.route("/api/population_chart", methods=["GET"])
+def population_chart():
+    # 한글 폰트 설정
+    font_path = 'NanumGothic-Regular.ttf'  # 서버 환경에 맞게 변경하세요
+    font_prop = fm.FontProperties(fname=font_path).get_name()
+    plt.rc('font', family=font_prop)
+    plt.rcParams['axes.unicode_minus'] = False  # 마이너스 깨짐 방지
+
+    # 🔹 데이터 미리 로딩
+    df = pd.read_csv("0510_광진구 상권, 지하철 통합 완성본.csv", encoding="utf-8")
+    try:
+        lat = float(request.args.get("lat"))
+        lon = float(request.args.get("lon"))
+
+        # 📍 가장 가까운 상권 찾기
+        df["거리"] = df.apply(lambda row: geodesic((lat, lon), (row["위도"], row["경도"])).meters, axis=1)
+        nearest_row = df.loc[df["거리"].idxmin()]
+
+        # 🔸 유동인구 데이터 추출
+        gender_data = nearest_row[[6, 7]].tolist()
+        age_data = nearest_row[8:14].tolist()
+        time_data = pd.to_numeric(nearest_row[14:20], errors='coerce').fillna(0).tolist()
+        day_data = pd.to_numeric(nearest_row[20:27], errors='coerce').fillna(0).tolist()
+
+        # 🔸 그래프 생성
+        fig, axes = plt.subplots(2, 2, figsize=(10, 8))
+        labels = [
+            (gender_data, ['남성', '여성'], '성별 유동인구 비율'),
+            (age_data, ['10대', '20대', '30대', '40대', '50대', '60대'], '연령대별 유동인구 비율'),
+            (time_data, ['0~6시', '6~11시', '11~14시', '14~17시', '17~21시', '21~24시'], '시간대별 유동인구 비율'),
+            (day_data, ['월', '화', '수', '목', '금', '토', '일'], '요일별 유동인구 비율')
+        ]
+
+        for ax, (data, lbls, title) in zip(axes.flat, labels):
+            if sum(data) > 0:
+                ax.pie(data, labels=lbls, autopct='%1.1f%%', shadow=True, startangle=140)
+            else:
+                ax.text(0, 0, "데이터 없음", ha='center', va='center')
+            ax.set_title(title)
+            ax.axis('equal')
+
+        buf = io.BytesIO()
+        plt.tight_layout()
+        plt.savefig(buf, format='png')
+        buf.seek(0)
+        return send_file(buf, mimetype='image/png')
+    except Exception as e:
+        return {"error": str(e)}, 400
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
