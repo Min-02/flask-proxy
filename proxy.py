@@ -396,13 +396,11 @@ def predicted_sales():
 @app.route("/api/population_chart", methods=["GET"])
 def population_chart():
     # 한글 폰트 설정
-    font_path = os.path.join(os.path.dirname(__file__), "NanumGothic-Regular.ttf")
-    if os.path.exists(font_path):
-        font_prop = fm.FontProperties(fname=font_path)
-        plt.rcParams['font.family'] = font_prop.get_name() or 'NanumGothic'
-        plt.rcParams['axes.unicode_minus'] = False
-    else:
-        print("⚠️ NanumGothic-Regular.ttf not found. Using default font.")
+    font_path = 'NanumGothic-Regular.ttf'  # 서버 환경에 맞게 변경하세요
+    font_prop = fm.FontProperties(fname=font_path).get_name()
+    plt.rc('font', family=font_prop)
+    plt.rcParams['axes.unicode_minus'] = False  # 마이너스 깨짐 방지
+
     # 🔹 데이터 미리 로딩
     df = pd.read_csv("0510_광진구 상권, 지하철 통합 완성본.csv", encoding="utf-8")
     try:
