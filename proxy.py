@@ -438,6 +438,7 @@ def population_chart():
         plt.tight_layout()
         plt.savefig(buf, format='png')
         buf.seek(0)
+        plt.close(fig)
         return send_file(buf, mimetype='image/png')
     except Exception as e:
         return {"error": str(e)}, 500
