@@ -396,10 +396,10 @@ def predicted_sales():
 @app.route("/api/population_chart", methods=["GET"])
 def population_chart():
     # 한글 폰트 설정
-    font_path = 'NanumGothic-Regular.ttf'  # 서버 환경에 맞게 변경하세요
-    font_prop = fm.FontProperties(fname=font_path).get_name()
-    plt.rc('font', family=font_prop)
-    plt.rcParams['axes.unicode_minus'] = False  # 마이너스 깨짐 방지
+    font_path = os.path.join(os.path.dirname(__file__), 'NanumGothic-Regular.ttf')
+    print("Font exists?", os.path.exists(font_path))
+    font_prop = fm.FontProperties(fname=font_path)
+    plt.rcParams['axes.unicode_minus'] = False
 
     # 🔹 데이터 미리 로딩
     df = pd.read_csv("0510_광진구 상권, 지하철 통합 완성본.csv", encoding="utf-8")
@@ -428,20 +428,19 @@ def population_chart():
 
         for ax, (data, lbls, title) in zip(axes.flat, labels):
             if sum(data) > 0:
-                ax.pie(data, labels=lbls, autopct='%1.1f%%', shadow=True, startangle=140)
+                ax.pie(data, labels=lbls, autopct='%1.1f%%', shadow=True, startangle=140, textprops={'fontproperties': font_prop})
             else:
-                ax.text(0, 0, "데이터 없음", ha='center', va='center')
-            ax.set_title(title)
+                ax.text(0, 0, "데이터 없음", ha='center', va='center', fontproperties=font_prop)
+            ax.set_title(title, fontproperties=font_prop)
             ax.axis('equal')
 
         buf = io.BytesIO()
         plt.tight_layout()
         plt.savefig(buf, format='png')
         buf.seek(0)
-        plt.close(fig)
         return send_file(buf, mimetype='image/png')
     except Exception as e:
-        return {"error": str(e)}, 400
+        return {"error": str(e)}, 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
