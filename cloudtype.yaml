@@ -3,7 +3,7 @@ app: python@3.12
 
 options:
   ports: 5000
-  start: gunicorn -b 0.0.0.0:5000 proxy:app
+  start: gunicorn -b 0.0.0.0:5000 proxy:app --timeout 120
 
 build:
   requirements:
