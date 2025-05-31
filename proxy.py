@@ -421,18 +421,14 @@ def predicted_sales():
 
 @app.route("/api/population_chart", methods=["GET"])
 def population_chart():
-    # ✅ 폰트 경로 fallback 처리
-    font_candidates = [
-        "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
-        "/usr/share/fonts/truetype/nanum/NanumGothic-Regular.ttf",
-        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-    ]
-    font_path = next((f for f in font_candidates if os.path.exists(f)), None)
-    if not font_path:
-        raise FileNotFoundError("🚫 서버에 한글 폰트가 없어 matplotlib 그래프를 생성할 수 없습니다.")
+    # 배포 환경에서 폰트 파일 경로 설정 (현재 파일 기준 상대 경로)
+    font_path = os.path.join(os.path.dirname(__file__), 'NanumGothic-Regular.ttf')
+    # 폰트가 제대로 있나 체크
+    if not os.path.exists(font_path):
+        raise RuntimeError(f"폰트 파일이 없습니다: {font_path}")
 
-    font_name = fm.FontProperties(fname=font_path).get_name()
+    font_prop = fm.FontProperties(fname=font_path)
+    font_name = font_prop.get_name()
     plt.rc('font', family=font_name)
     plt.rcParams['axes.unicode_minus'] = False
 
@@ -496,18 +492,14 @@ def shap_chart():
         })
         shap_df = shap_df.sort_values("shap_value", ascending=False).head(7)
 
-        # ✅ 폰트 경로 fallback 처리
-        font_candidates = [
-            "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
-            "/usr/share/fonts/truetype/nanum/NanumGothic-Regular.ttf",
-            "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-        ]
-        font_path = next((f for f in font_candidates if os.path.exists(f)), None)
-        if not font_path:
-            raise FileNotFoundError("🚫 서버에 한글 폰트가 없어 matplotlib 그래프를 생성할 수 없습니다.")
+        # 배포 환경에서 폰트 파일 경로 설정 (현재 파일 기준 상대 경로)
+        font_path = os.path.join(os.path.dirname(__file__), 'NanumGothic-Regular.ttf')
+        # 폰트가 제대로 있나 체크
+        if not os.path.exists(font_path):
+            raise RuntimeError(f"폰트 파일이 없습니다: {font_path}")
 
-        font_name = fm.FontProperties(fname=font_path).get_name()
+        font_prop = fm.FontProperties(fname=font_path)
+        font_name = font_prop.get_name()
         plt.rc('font', family=font_name)
         plt.rcParams['axes.unicode_minus'] = False
 
