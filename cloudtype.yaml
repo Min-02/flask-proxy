@@ -6,5 +6,10 @@ options:
   start: gunicorn -b 0.0.0.0:5000 proxy:app --timeout 120
 
 build:
+  commands:
+    - apt update
+    - apt install -y fonts-nanum
+    - fc-cache -fv
+    
   requirements:
     - requirements.txt
