@@ -429,7 +429,7 @@ def population_chart():
 
     font_prop = fm.FontProperties(fname=font_path)
     font_name = font_prop.get_name()
-    plt.rc('font', family=font_name)
+    plt.rcParams['font.family'] = font_name
     plt.rcParams['axes.unicode_minus'] = False
 
     # 🔹 데이터 미리 로딩
@@ -489,8 +489,7 @@ def shap_chart():
         shap_df = pd.DataFrame({
             'feature': input_df.columns,
             'shap_value': np.abs(shap_values.values).mean(axis=0)
-        })
-        shap_df = shap_df.sort_values("shap_value", ascending=False).head(7)
+        }).sort_values("shap_value", ascending=False).head(7)
 
         # 배포 환경에서 폰트 파일 경로 설정 (현재 파일 기준 상대 경로)
         font_path = os.path.join(os.path.dirname(__file__), 'NanumGothic-Regular.ttf')
@@ -500,7 +499,7 @@ def shap_chart():
 
         font_prop = fm.FontProperties(fname=font_path)
         font_name = font_prop.get_name()
-        plt.rc('font', family=font_name)
+        plt.rcParams['font.family'] = font_name
         plt.rcParams['axes.unicode_minus'] = False
 
         plt.figure(figsize=(8, 6))
