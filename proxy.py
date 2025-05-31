@@ -16,6 +16,11 @@ import json
 import joblib
 import os
 import io
+import shap
+import platform
+import base64
+
+
 
 matplotlib.use('Agg')
 app = Flask(__name__)
@@ -70,11 +75,11 @@ def predicted_sales():
 
     # 📂 모델 및 입력 피처 예측값 불러오기
     model_paths = {
-        "한식음식점": "0520_model_Korean_Chinese.pkl",
-        "중식음식점": "0520_model_Korean_Chinese.pkl",
-        "커피-음료": "0520_model_Cafe_Beverage.pkl"
+        "한식음식점": "0523_model_Korean_Chinese.pkl",
+        "중식음식점": "0523_model_Korean_Chinese.pkl",
+        "커피-음료": "0523_model_Cafe_Beverage.pkl"
     }
-    label_encoders = joblib.load("0520_encoders.pkl")
+    label_encoders = joblib.load("0523_encoders.pkl")
     feature_df = pd.read_csv("20252_input_vector_0521.csv")
 
     # 📂 데이터셋 로드 함수 정의
@@ -85,7 +90,7 @@ def predicted_sales():
             return pd.read_csv(path, encoding='utf-8-sig')
 
     # 📂 데이터 로딩
-    df = load_dataframe("0510_광진구 상권, 지하철 통합 완성본.csv")
+    df = load_dataframe("0523_광진구 상권, 지하철, 면적.csv")
     df_subway = load_dataframe("광진구 지하철 평균 승하차 인원 수.csv").dropna(subset=["위도", "경도"])
 
     # 📌 기준분기 추가 (예: 20244)
@@ -126,8 +131,10 @@ def predicted_sales():
     # ✅ 파생 피처 생성 함수 (안전 버전)
     def add_derived_features(df):
         df = df.copy()
+
         df["남성_비율"] = df["남성_유동인구_수"] / (df["총_유동인구_수"] + 1)
         df["여성_비율"] = df["여성_유동인구_수"] / (df["총_유동인구_수"] + 1)
+
         df["연령대_중심값"] = (
             df["연령대_10_유동인구_수"] * 10 +
             df["연령대_20_유동인구_수"] * 20 +
@@ -136,8 +143,10 @@ def predicted_sales():
             df["연령대_50_유동인구_수"] * 50 +
             df["연령대_60_이상_유동인구_수"] * 65
         ) / (df["총_유동인구_수"] + 1)
+
         df["상주대비_유동비"] = df["총_유동인구_수"] / (df["총_상주인구_수"] + 1)
         df["직장대비_유동비"] = df["총_유동인구_수"] / (df["총_직장_인구_수"] + 1)
+
         if "운영_영업_개월_평균" in df.columns and "서울_운영_영업_개월_평균" in df.columns:
             df["상권_vs_서울_운영차"] = df["운영_영업_개월_평균"] - df["서울_운영_영업_개월_평균"]
         else:
@@ -147,8 +156,15 @@ def predicted_sales():
             df["상권_vs_서울_폐업차"] = df["폐업_영업_개월_평균"] - df["서울_폐업_영업_개월_평균"]
         else:
             df["상권_vs_서울_폐업차"] = np.nan
+
         df["경쟁_밀집도"] = df["300m내_경쟁_업종_수"] / (df["총_유동인구_수"] + 1)
         df["역_접근성"] = df["가장_가까운_역_승하차_인원_수"] / (df["역까지_거리_m"] + 1)
+
+        if category in ["한식음식점", "중식음식점"]:
+            df["면적(㎡)"] = df["면적(㎡)"].astype(str).str.replace(',', '').astype(float)
+            df["면적당_유동인구"] = df["총_유동인구_수"] / (df["면적(㎡)"] + 1)
+            df["면적당_경쟁_업종_수"] = df["300m내_경쟁_업종_수"] / (df["면적(㎡)"] + 1)
+            df["log_면적"] = np.log1p(df["면적(㎡)"])
         return df
 
     # 입력된 데이터
@@ -190,6 +206,8 @@ def predicted_sales():
         model = joblib.load(model_paths[category])
         df_basis = get_sales_distribution_basis(df, nearest["상권_코드_명"], category)
         df_basis = df_basis.dropna(subset=["점포_당_매출_금액"])
+        print("\n✅ df_basis shape:", df_basis.shape)
+        print(df_basis.head())
 
         # 📌 예측 불가능한 조건 처리
         if len(df_basis) == 0:
@@ -217,6 +235,9 @@ def predicted_sales():
                 input_vec["300m내_경쟁_업종_수"] = store_count
             else:
                 input_vec["300m내_경쟁_업종_수"] = nearest["300m내_경쟁_업종_수"]  # fallback
+
+            if "면적(㎡)" not in input_vec and "면적(㎡)" in nearest:
+                input_vec["면적(㎡)"] = nearest["면적(㎡)"]
 
             # ✅ 누락 피처 보완
             needed_cols = [
@@ -289,12 +310,15 @@ def predicted_sales():
                         input_vec["상권_변화_지표_명"] = int(chg_enc)
                         input_vec["300m내_경쟁_업종_수"] = near["300m내_경쟁_업종_수"]
 
+                        if "면적(㎡)" not in input_vec and "면적(㎡)" in nearest:
+                            input_vec["면적(㎡)"] = nearest["면적(㎡)"]
+
                         # ✅ 누락 피처 보완
                         recent_row = df[
                             (df["기준분기"] == 20244) &
                             (df["상권_코드"].astype(int) == int(near["상권_코드"])) &
                             (df["서비스_업종_코드_명"] == category)
-                            ]
+                        ]
                         if not recent_row.empty:
                             for col in needed_cols:
                                 if col not in input_vec:
@@ -385,10 +409,67 @@ def predicted_sales():
         print("추천위치", len(final_recommendations), ranked_output)
         print("추천순위", len(ranked_output), ranked_output)
 
+        # 📌 SHAP 값 계산
+        explainer = shap.Explainer(model)
+        shap_values = explainer(input_df)
+
+        # ✅ SHAP 피처 이름 매핑 (시각화용)
+        shap_name_map = {
+            "남성_비율": "유동인구_남성비율",
+            "여성_비율": "유동인구_여성비율",
+            "연령대_중심값": "유동인구_평균연령",
+            "상주대비_유동비": "상주인구_대비_유동비율",
+            "직장대비_유동비": "직장인구_대비_유동비율",
+            "상권_vs_서울_운영차": "운영개월_상권_서울_차이",
+            "상권_vs_서울_폐업차": "폐업개월_상권_서울_차이",
+            "경쟁_밀집도": "경쟁업체_밀집도",
+            "역_접근성": "지하철_접근성지수",
+            "면적당_유동인구": "면적대비_유동인구_밀도",
+            "면적당_경쟁_업종_수": "면적대비_경쟁업체_밀도",
+            "log_면적": "면적_로그변환값"
+        }
+
+        # 📌 SHAP 값 평균 기준 상위 n개 추출
+        shap_df = pd.DataFrame({
+            'feature': input_df.columns,
+            'shap_value': np.abs(shap_values.values).mean(axis=0)
+        })
+        # ✅ 시각화용 이름 치환
+        shap_df["feature_display"] = shap_df["feature"].apply(lambda x: shap_name_map.get(x, x))
+
+        n_top = 7
+        top_df = shap_df.sort_values("shap_value", ascending=False).head(n_top)
+
+        # 📌 한글 폰트 설정
+        if platform.system() == 'Windows':
+            font_path = "C:/Windows/Fonts/malgun.ttf"
+        elif platform.system() == 'Darwin':
+            font_path = "/System/Library/Fonts/AppleGothic.ttf"
+        else:
+            font_path = "/usr/share/fonts/truetype/nanum/NanumGothic.ttf"
+
+        font_name = fm.FontProperties(fname=font_path).get_name()
+        plt.rc('font', family=font_name)
+        plt.rcParams['axes.unicode_minus'] = False
+
+        # 📈 SHAP 중요도 그래프
+        plt.figure(figsize=(8, 6))
+        plt.barh(top_df["feature_display"][::-1], top_df["shap_value"][::-1])
+        plt.title("상위 7개 Feature 중요도")
+        plt.xlabel("평균 SHAP 값 (모델 영향력)")
+        plt.tight_layout()
+
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png')
+        buf.seek(0)
+        plt.close()
+        shap_base64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+
         return jsonify({
             "입력위치": base_result,
             "추천위치": final_recommendations,
-            "추천순위": ranked_output
+            "추천순위": ranked_output,
+            "shap_chart": shap_base64
             })
     except Exception as e:
         return jsonify({'message': f"❌ 예측 중 오류 발생: {str(e)}"})
@@ -396,10 +477,10 @@ def predicted_sales():
 @app.route("/api/population_chart", methods=["GET"])
 def population_chart():
     # 한글 폰트 설정
-    font_path = os.path.join(os.path.dirname(__file__), 'NanumGothic-Regular.ttf')
-    print("Font exists?", os.path.exists(font_path))
-    font_prop = fm.FontProperties(fname=font_path)
-    plt.rcParams['axes.unicode_minus'] = False
+    font_path = 'NanumGothic-Regular.ttf'  # 서버 환경에 맞게 변경하세요
+    font_prop = fm.FontProperties(fname=font_path).get_name()
+    plt.rc('font', family=font_prop)
+    plt.rcParams['axes.unicode_minus'] = False  # 마이너스 깨짐 방지
 
     # 🔹 데이터 미리 로딩
     df = pd.read_csv("0510_광진구 상권, 지하철 통합 완성본.csv", encoding="utf-8")
@@ -428,20 +509,19 @@ def population_chart():
 
         for ax, (data, lbls, title) in zip(axes.flat, labels):
             if sum(data) > 0:
-                ax.pie(data, labels=lbls, autopct='%1.1f%%', shadow=True, startangle=140, textprops={'fontproperties': font_prop})
+                ax.pie(data, labels=lbls, autopct='%1.1f%%', shadow=True, startangle=140)
             else:
-                ax.text(0, 0, "데이터 없음", ha='center', va='center', fontproperties=font_prop)
-            ax.set_title(title, fontproperties=font_prop)
+                ax.text(0, 0, "데이터 없음", ha='center', va='center')
+            ax.set_title(title)
             ax.axis('equal')
 
         buf = io.BytesIO()
         plt.tight_layout()
         plt.savefig(buf, format='png')
         buf.seek(0)
-        plt.close(fig)
         return send_file(buf, mimetype='image/png')
     except Exception as e:
-        return {"error": str(e)}, 500
+        return {"error": str(e)}, 400
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
