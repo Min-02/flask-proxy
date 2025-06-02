@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 import pandas as pd
 import numpy as np
@@ -473,10 +473,10 @@ def population_chart():
         df["거리"] = df.apply(lambda row: geodesic((lat, lon), (row["위도"], row["경도"])).meters, axis=1)
         nearest_row = df.loc[df["거리"].idxmin()]
 
-        gender_data = nearest_row[[6, 7]].tolist()
-        age_data = nearest_row[8:14].tolist()
-        time_data = pd.to_numeric(nearest_row[14:20], errors='coerce').fillna(0).tolist()
-        day_data = pd.to_numeric(nearest_row[20:27], errors='coerce').fillna(0).tolist()
+        gender_data = nearest_row.iloc[[6, 7]].tolist()
+        age_data = nearest_row.iloc[8:14].tolist()
+        time_data = pd.to_numeric(nearest_row.iloc[14:20], errors='coerce').fillna(0).tolist()
+        day_data = pd.to_numeric(nearest_row.iloc[20:27], errors='coerce').fillna(0).tolist()
 
         fig, axes = plt.subplots(2, 2, figsize=(10, 8))
         labels = [
