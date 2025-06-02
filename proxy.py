@@ -467,11 +467,14 @@ plt.rcParams['axes.unicode_minus'] = False
 def population_chart():
     try:
         df = pd.read_csv("0510_광진구 상권, 지하철 통합 완성본.csv", encoding="utf-8")
+        print("✅ df shape:", df.shape)
         lat = float(request.args.get("lat"))
         lon = float(request.args.get("lon"))
+        print("✅ lat, lon:", lat, lon)
 
         df["거리"] = df.apply(lambda row: geodesic((lat, lon), (row["위도"], row["경도"])).meters, axis=1)
         nearest_row = df.loc[df["거리"].idxmin()]
+        print("✅ nearest:", nearest_row)
 
         gender_data = nearest_row.iloc[[6, 7]].tolist()
         age_data = nearest_row.iloc[8:14].tolist()
@@ -505,6 +508,7 @@ def population_chart():
         return jsonify({"population_chart_base64": img_base64})
 
     except Exception as e:
+        print("⚠️ population_chart API 오류:", e)
         return {"error": str(e)}, 400
 
 @app.route("/api/shap_chart", methods=["POST"])
