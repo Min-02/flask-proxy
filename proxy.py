@@ -499,11 +499,10 @@ def population_chart():
         plt.tight_layout()
         plt.savefig(buf, format='png')
         buf.seek(0)
+        img_base64 = base64.b64encode(buf.read()).decode('utf-8')
         plt.close()
 
-        response = make_response(send_file(buf, mimetype='image/png'))
-        response.headers['Access-Control-Allow-Origin'] = '*'
-        return response
+        return jsonify({"population_chart_base64": img_base64})
 
     except Exception as e:
         return {"error": str(e)}, 400
@@ -536,10 +535,12 @@ def shap_chart():
         buf = io.BytesIO()
         plt.savefig(buf, format='png')
         buf.seek(0)
+        img_base64 = base64.b64encode(buf.read()).decode('utf-8')
         plt.close()
 
-        response = make_response(send_file(buf, mimetype='image/png'))
+        response = make_response(jsonify({"shap_chart_base64": img_base64}))
         response.headers['Access-Control-Allow-Origin'] = '*'
+
         return response
 
     except Exception as e:
