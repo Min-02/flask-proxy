@@ -448,36 +448,36 @@ def predicted_sales():
     except Exception as e:
         return jsonify({'message': f"❌ 예측 중 오류 발생: {str(e)}"})
 
+def get_korean_font():
+    # 현재 경로 기준
+    font_path = os.path.join(os.path.dirname(__file__), 'NanumGothic-Regular.ttf')
+    if os.path.exists(font_path):
+        return font_path
+    # 시스템 경로 (예: Cloudtype 등)
+    system_font = "/usr/share/fonts/truetype/nanum/NanumGothic.ttf"
+    if os.path.exists(system_font):
+        return system_font
+    raise RuntimeError("한글 폰트 파일을 찾을 수 없습니다. 한글이 깨질 수 있습니다.")
+font_path = get_korean_font()
+font_prop = fm.FontProperties(fname=font_path)
+plt.rc('font', family=font_prop.get_name())
+plt.rcParams['axes.unicode_minus'] = False
+
 @app.route("/api/population_chart", methods=["GET"])
 def population_chart():
-    # 배포 환경에서 폰트 파일 경로 설정 (현재 파일 기준 상대 경로)
-    font_path = os.path.join(os.path.dirname(__file__), 'NanumGothic-Regular.ttf')
-    # 폰트가 제대로 있나 체크
-    if not os.path.exists(font_path):
-        raise RuntimeError(f"폰트 파일이 없습니다: {font_path}")
-
-    font_prop = fm.FontProperties(fname=font_path)
-    font_name = font_prop.get_name()
-    plt.rcParams['font.family'] = font_name
-    plt.rcParams['axes.unicode_minus'] = False
-
-    # 🔹 데이터 미리 로딩
-    df = pd.read_csv("0510_광진구 상권, 지하철 통합 완성본.csv", encoding="utf-8")
     try:
+        df = pd.read_csv("0510_광진구 상권, 지하철 통합 완성본.csv", encoding="utf-8")
         lat = float(request.args.get("lat"))
         lon = float(request.args.get("lon"))
 
-        # 📍 가장 가까운 상권 찾기
         df["거리"] = df.apply(lambda row: geodesic((lat, lon), (row["위도"], row["경도"])).meters, axis=1)
         nearest_row = df.loc[df["거리"].idxmin()]
 
-        # 🔸 유동인구 데이터 추출
         gender_data = nearest_row[[6, 7]].tolist()
         age_data = nearest_row[8:14].tolist()
         time_data = pd.to_numeric(nearest_row[14:20], errors='coerce').fillna(0).tolist()
         day_data = pd.to_numeric(nearest_row[20:27], errors='coerce').fillna(0).tolist()
 
-        # 🔸 그래프 생성
         fig, axes = plt.subplots(2, 2, figsize=(10, 8))
         labels = [
             (gender_data, ['남성', '여성'], '성별 유동인구 비율'),
@@ -488,17 +488,23 @@ def population_chart():
 
         for ax, (data, lbls, title) in zip(axes.flat, labels):
             if sum(data) > 0:
-                ax.pie(data, labels=lbls, autopct='%1.1f%%', shadow=True, startangle=140)
+                ax.pie(data, labels=lbls, autopct='%1.1f%%', shadow=True, startangle=140,
+                       textprops={'fontproperties': font_prop})
             else:
-                ax.text(0, 0, "데이터 없음", ha='center', va='center')
-            ax.set_title(title)
+                ax.text(0, 0, "데이터 없음", ha='center', va='center', fontproperties=font_prop)
+            ax.set_title(title, fontproperties=font_prop)
             ax.axis('equal')
 
         buf = io.BytesIO()
         plt.tight_layout()
         plt.savefig(buf, format='png')
         buf.seek(0)
-        return send_file(buf, mimetype='image/png')
+        plt.close()
+
+        response = make_response(send_file(buf, mimetype='image/png'))
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        return response
+
     except Exception as e:
         return {"error": str(e)}, 400
 
@@ -512,36 +518,29 @@ def shap_chart():
         input_df = pd.DataFrame([input_vec])
         model = joblib.load(model_path)
 
-        explainer = shap.Explainer(model)
-        shap_values = explainer(input_df)
+        # 안전하게 TreeExplainer로 고정
+        explainer = shap.TreeExplainer(model)
+        shap_values = explainer.shap_values(input_df)
 
         shap_df = pd.DataFrame({
             'feature': input_df.columns,
-            'shap_value': np.abs(shap_values.values).mean(axis=0)
+            'shap_value': np.abs(shap_values).mean(axis=0)
         }).sort_values("shap_value", ascending=False).head(7)
 
-        # 배포 환경에서 폰트 파일 경로 설정 (현재 파일 기준 상대 경로)
-        font_path = os.path.join(os.path.dirname(__file__), 'NanumGothic-Regular.ttf')
-        # 폰트가 제대로 있나 체크
-        if not os.path.exists(font_path):
-            raise RuntimeError(f"폰트 파일이 없습니다: {font_path}")
-
-        font_prop = fm.FontProperties(fname=font_path)
-        font_name = font_prop.get_name()
-        plt.rcParams['font.family'] = font_name
-        plt.rcParams['axes.unicode_minus'] = False
-
         plt.figure(figsize=(8, 6))
-        plt.barh(shap_df["feature"][::-1], shap_df["shap_value"][::-1])
-        plt.title("상위 7개 Feature 중요도")
-        plt.xlabel("평균 SHAP 값 (모델 영향력)")
+        plt.barh(shap_df["feature"][::-1], shap_df["shap_value"][::-1], color='skyblue')
+        plt.title("상위 7개 Feature 중요도", fontproperties=font_prop)
+        plt.xlabel("평균 SHAP 값 (모델 영향력)", fontproperties=font_prop)
         plt.tight_layout()
 
         buf = io.BytesIO()
         plt.savefig(buf, format='png')
         buf.seek(0)
         plt.close()
-        return send_file(buf, mimetype='image/png')
+
+        response = make_response(send_file(buf, mimetype='image/png'))
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        return response
 
     except Exception as e:
         return jsonify({"error": f"SHAP 오류: {str(e)}"}), 500
