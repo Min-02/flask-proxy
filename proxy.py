@@ -180,6 +180,14 @@ def predicted_sales():
     selected_days = data["day_of_week"]
     store_count = int(data["store_count"])
 
+    # 🔹 경쟁 밀집도 강도 계산
+    if store_count >= 30:
+        density_grade = "상"
+    elif store_count >= 20:
+        density_grade = "중"
+    else:
+        density_grade = "하"
+
     # 코드 → 업종명 매핑
     industry_code_map = {
         "I212": "커피-음료",
@@ -266,11 +274,21 @@ def predicted_sales():
             predicted_sales = apply_temporal_corrections(predicted_sales, df_basis, selected_days, start_time, end_time)
             base_sales = predicted_sales
 
+            # 🔸 추천 위치별 경쟁 밀집도 강도 계산
+            n_competitors = int(input_vec["300m내_경쟁_업종_수"])
+            if n_competitors >= 30:
+                density_grade_rec = "상"
+            elif n_competitors >= 20:
+                density_grade_rec = "중"
+            else:
+                density_grade_rec = "하"
+
             base_result = {"lat": lat, "lon": lon, "sales": int(predicted_sales),
                            "상권명": nearest["상권_코드_명"],
                            "지하철역": station_name,
                            "지하철역거리": int(station_dist),
-                           "승하차": int(station_traffic)
+                           "승하차": int(station_traffic),
+                           "밀집도강도": density_grade_rec
                            }
 
             print(f"\n📍 가장 가까운 상권: {nearest['상권_코드_명']}")
@@ -341,10 +359,20 @@ def predicted_sales():
                         sales = apply_temporal_corrections(sales, df_basis_near, selected_days, start_time, end_time)
                         percent = round(sales / base_sales * 100) if base_sales else None
 
+                        # 🔸 추천 위치별 경쟁 밀집도 강도 계산
+                        n_competitors = near["300m내_경쟁_업종_수"]
+                        if n_competitors >= 30:
+                            density_grade_rec = "상"
+                        elif n_competitors >= 20:
+                            density_grade_rec = "중"
+                        else:
+                            density_grade_rec = "하"
+
                         results.append({
                             "lat": adj_lat, "lon": adj_lon, "dist": int(dist), "sales": int(sales),
                             "percent": percent, "상권명": near["상권_코드_명"],
-                            "지하철역": stat_name, "지하철역거리": int(stat_d), "승하차": int(stat_t)
+                            "지하철역": stat_name, "지하철역거리": int(stat_d), "승하차": int(stat_t),
+                            "density_grade": density_grade_rec
                         })
 
         # 🔹 추천 결과 출력
@@ -396,7 +424,8 @@ def predicted_sales():
                         "지하철역": loc["지하철역"],
                         "지하철역거리": loc["지하철역거리"],
                         "승하차": loc["승하차"],
-                        "예상매출": loc["sales"]
+                        "예상매출": loc["sales"],
+                        "밀집도강도": loc["density_grade"]
                     })
                 final_recommendations.append(loc)
                 ranked_output.append(group_result)
