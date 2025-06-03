@@ -346,8 +346,8 @@ def predicted_sales():
                         # 🔹 계절성 피처 삽입
                         input_vec["연도"] = 2025
                         input_vec["분기"] = 2
-                        input_vec["분기_sin"] = np.sin(2 * np.pi * 2 / 4)
-                        input_vec["분기_cos"] = np.cos(2 * np.pi * 2 / 4)
+                        input_vec["분기_sin"] = np.sin(2 * np.pi * 2 / 4).item()
+                        input_vec["분기_cos"] = np.cos(2 * np.pi * 2 / 4).item()
 
                         input_df = pd.DataFrame([input_vec])
                         input_df = add_derived_features(input_df)
@@ -437,7 +437,7 @@ def predicted_sales():
         print("추천순위", len(ranked_output), ranked_output)
         print("input_vector", input_vec)
         print("model_path", model_paths[category])
-        
+
 
         return jsonify({
             "입력위치": base_result,
