@@ -19,7 +19,7 @@ import io
 import shap
 import platform
 import base64
-
+import traceback
 
 
 matplotlib.use('Agg')
@@ -547,6 +547,8 @@ def shap_chart():
         return response
 
     except Exception as e:
+        print("SHAP 에러 발생:", e)
+        traceback.print_exc()
         return jsonify({"error": f"SHAP 오류: {str(e)}"}), 500
 
 if __name__ == "__main__":
