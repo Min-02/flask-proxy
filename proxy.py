@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, make_response
+from flask import Flask, request, jsonify, send_file, make_response
 from flask_cors import CORS
 import pandas as pd
 import numpy as np
@@ -448,39 +448,32 @@ def predicted_sales():
     except Exception as e:
         return jsonify({'message': f"❌ 예측 중 오류 발생: {str(e)}"})
 
-def get_korean_font():
-    # 현재 경로 기준
-    font_path = os.path.join(os.path.dirname(__file__), 'NanumGothic-Regular.ttf')
-    if os.path.exists(font_path):
-        return font_path
-    # 시스템 경로 (예: Cloudtype 등)
-    system_font = "/usr/share/fonts/truetype/nanum/NanumGothic.ttf"
-    if os.path.exists(system_font):
-        return system_font
-    raise RuntimeError("한글 폰트 파일을 찾을 수 없습니다. 한글이 깨질 수 있습니다.")
-font_path = get_korean_font()
-font_prop = fm.FontProperties(fname=font_path)
-plt.rc('font', family=font_prop.get_name())
-plt.rcParams['axes.unicode_minus'] = False
-
 @app.route("/api/population_chart", methods=["GET"])
 def population_chart():
+    # 한글 폰트 설정
+    font_path = os.path.join(os.path.dirname(__file__), 'NanumGothic-Regular.ttf')
+    print("Font exists?", os.path.exists(font_path))
+    font_prop = fm.FontProperties(fname=font_path)
+    plt.rcParams['axes.unicode_minus'] = False
+
+    # 🔹 데이터 미리 로딩
+    df = pd.read_csv("0510_광진구 상권, 지하철 통합 완성본.csv", encoding="utf-8")
+
     try:
-        df = pd.read_csv("0510_광진구 상권, 지하철 통합 완성본.csv", encoding="utf-8")
-        print("✅ df shape:", df.shape)
         lat = float(request.args.get("lat"))
         lon = float(request.args.get("lon"))
-        print("✅ lat, lon:", lat, lon)
 
+        # 📍 가장 가까운 상권 찾기
         df["거리"] = df.apply(lambda row: geodesic((lat, lon), (row["위도"], row["경도"])).meters, axis=1)
         nearest_row = df.loc[df["거리"].idxmin()]
-        print("✅ nearest:", nearest_row)
 
+        # 🔸 유동인구 데이터 추출
         gender_data = nearest_row.iloc[[6, 7]].tolist()
         age_data = nearest_row.iloc[8:14].tolist()
         time_data = pd.to_numeric(nearest_row.iloc[14:20], errors='coerce').fillna(0).tolist()
         day_data = pd.to_numeric(nearest_row.iloc[20:27], errors='coerce').fillna(0).tolist()
 
+        # 🔸 그래프 생성
         fig, axes = plt.subplots(2, 2, figsize=(10, 8))
         labels = [
             (gender_data, ['남성', '여성'], '성별 유동인구 비율'),
@@ -502,53 +495,13 @@ def population_chart():
         plt.tight_layout()
         plt.savefig(buf, format='png')
         buf.seek(0)
-        img_base64 = base64.b64encode(buf.read()).decode('utf-8')
         plt.close()
 
-        return jsonify({"population_chart_base64": img_base64})
+        return send_file(buf, mimetype='image/png')
 
     except Exception as e:
         print("⚠️ population_chart API 오류:", e)
         return {"error": str(e)}, 400
-
-@app.route("/api/shap_chart", methods=["POST"])
-def shap_chart():
-    try:
-        data = request.get_json()
-        input_vec = data["features"]
-        model_path = data["model_path"]
-
-        input_df = pd.DataFrame([input_vec])
-        model = joblib.load(model_path)
-
-        # 안전하게 TreeExplainer로 고정
-        explainer = shap.TreeExplainer(model)
-        shap_values = explainer.shap_values(input_df)
-
-        shap_df = pd.DataFrame({
-            'feature': input_df.columns,
-            'shap_value': np.abs(shap_values).mean(axis=0)
-        }).sort_values("shap_value", ascending=False).head(7)
-
-        plt.figure(figsize=(8, 6))
-        plt.barh(shap_df["feature"][::-1], shap_df["shap_value"][::-1], color='skyblue')
-        plt.title("상위 7개 Feature 중요도", fontproperties=font_prop)
-        plt.xlabel("평균 SHAP 값 (모델 영향력)", fontproperties=font_prop)
-        plt.tight_layout()
-
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png')
-        buf.seek(0)
-        img_base64 = base64.b64encode(buf.read()).decode('utf-8')
-        plt.close()
-
-        response = make_response(jsonify({"shap_chart_base64": img_base64}))
-        response.headers['Access-Control-Allow-Origin'] = '*'
-
-        return response
-
-    except Exception as e:
-        return jsonify({"error": f"SHAP 오류: {str(e)}"}), 500
 
 
 if __name__ == "__main__":
