@@ -517,6 +517,8 @@ def shap_chart():
         model_path = data["model_path"]
 
         input_df = pd.DataFrame([input_vec])
+        # 문자열(object) 컬럼 제거
+        input_df = input_df.select_dtypes(include=["number", "bool"])
         model = joblib.load(model_path)
 
         # 안전하게 TreeExplainer로 고정
