@@ -160,8 +160,9 @@ def predicted_sales():
         df["경쟁_밀집도"] = df["300m내_경쟁_업종_수"] / (df["총_유동인구_수"] + 1)
         df["역_접근성"] = df["가장_가까운_역_승하차_인원_수"] / (df["역까지_거리_m"] + 1)
 
+        df["면적(㎡)"] = df["면적(㎡)"].astype(str).str.replace(',', '').astype(float)
+
         if category in ["한식음식점", "중식음식점"]:
-            df["면적(㎡)"] = df["면적(㎡)"].astype(str).str.replace(',', '').astype(float)
             df["면적당_유동인구"] = df["총_유동인구_수"] / (df["면적(㎡)"] + 1)
             df["면적당_경쟁_업종_수"] = df["300m내_경쟁_업종_수"] / (df["면적(㎡)"] + 1)
             df["log_면적"] = np.log1p(df["면적(㎡)"])
