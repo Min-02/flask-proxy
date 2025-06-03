@@ -438,12 +438,62 @@ def predicted_sales():
         print("추천위치", len(final_recommendations), ranked_output)
         print("추천순위", len(ranked_output), ranked_output)
 
+        # 한글 폰트 설정
+        font_path = os.path.join(os.path.dirname(__file__), 'NanumGothic-Regular.ttf')
+        print("Font exists?", os.path.exists(font_path))
+        font_prop = fm.FontProperties(fname=font_path)
+        plt.rcParams['axes.unicode_minus'] = False
+
+        # 📌 SHAP 값 계산
+        explainer = shap.Explainer(model)
+        shap_values = explainer(input_df)
+
+        # ✅ SHAP 피처 이름 매핑 (시각화용)
+        shap_name_map = {
+            "남성_비율": "유동인구_남성비율",
+            "여성_비율": "유동인구_여성비율",
+            "연령대_중심값": "유동인구_평균연령",
+            "상주대비_유동비": "상주인구_대비_유동비율",
+            "직장대비_유동비": "직장인구_대비_유동비율",
+            "상권_vs_서울_운영차": "운영개월_상권_서울_차이",
+            "상권_vs_서울_폐업차": "폐업개월_상권_서울_차이",
+            "경쟁_밀집도": "경쟁업체_밀집도",
+            "역_접근성": "지하철_접근성지수",
+            "면적당_유동인구": "면적대비_유동인구_밀도",
+            "면적당_경쟁_업종_수": "면적대비_경쟁업체_밀도",
+            "log_면적": "면적_로그변환값"
+        }
+        # 📌 SHAP 값 평균 기준 상위 n개 추출
+        shap_df = pd.DataFrame({
+            'feature': input_df.columns,
+            'shap_value': np.abs(shap_values.values).mean(axis=0)
+        })
+        # ✅ 시각화용 이름 치환
+        shap_df["feature_display"] = shap_df["feature"].apply(lambda x: shap_name_map.get(x, x))
+
+        n_top = 7
+        top_df = shap_df.sort_values("shap_value", ascending=False).head(n_top)
+
+        # 📈 SHAP 중요도 그래프
+        plt.figure(figsize=(8, 6))
+        plt.barh(top_df["feature_display"][::-1], top_df["shap_value"][::-1])
+        plt.title("상위 7개 Feature 중요도")
+        plt.xlabel("평균 SHAP 값 (모델 영향력)")
+        plt.tight_layout()
+
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png')
+        buf.seek(0)
+        plt.close()
+
+        response = send_file(buf, mimetype='image/png')
+        response.headers['Access-Control-Allow-Origin'] = '*'
+
         return jsonify({
             "입력위치": base_result,
             "추천위치": final_recommendations,
             "추천순위": ranked_output,
-            "input_vector": input_vec,
-            "model_path": model_paths[category]
+            "shap_chart": response
             })
     except Exception as e:
         return jsonify({'message': f"❌ 예측 중 오류 발생: {str(e)}"})
