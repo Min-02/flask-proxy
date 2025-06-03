@@ -180,13 +180,14 @@ def predicted_sales():
     selected_days = data["day_of_week"]
     store_count = int(data["store_count"])
 
-    # 🔹 경쟁 밀집도 강도 계산
-    if store_count >= 30:
-        density_grade = "상"
-    elif store_count >= 20:
-        density_grade = "중"
-    else:
-        density_grade = "하"
+    # ✅ 경쟁 밀집도 등급 분류 함수
+    def get_density_grade(count):
+        if count > 30:
+            return "상"
+        elif count > 20:
+            return "중"
+        else:
+            return "하"
 
     # 코드 → 업종명 매핑
     industry_code_map = {
@@ -276,19 +277,14 @@ def predicted_sales():
 
             # 🔸 추천 위치별 경쟁 밀집도 강도 계산
             n_competitors = int(input_vec["300m내_경쟁_업종_수"])
-            if n_competitors >= 30:
-                density_grade_rec = "상"
-            elif n_competitors >= 20:
-                density_grade_rec = "중"
-            else:
-                density_grade_rec = "하"
+            density_grade = get_density_grade(n_competitors)
 
             base_result = {"lat": lat, "lon": lon, "sales": int(predicted_sales),
                            "상권명": nearest["상권_코드_명"],
                            "지하철역": station_name,
                            "지하철역거리": int(station_dist),
                            "승하차": int(station_traffic),
-                           "밀집도강도": density_grade_rec
+                           "밀집도강도": density_grade
                            }
 
             print(f"\n📍 가장 가까운 상권: {nearest['상권_코드_명']}")
@@ -296,6 +292,7 @@ def predicted_sales():
             print(f"🕒 영업 시간: {start_time}시 ~ {end_time}시")
             print(f"📆 영업 요일: {', '.join(selected_days)}")
             print(f"💰 예측 월 매출: 약 {int(predicted_sales):,}원 (기준 100%)")
+            print(f"📊 경쟁 밀집도 등급: {density_grade}")
             print("\n📍 신뢰할 수 있는 주변 위치 분석 중...")
 
         results = []
@@ -310,6 +307,7 @@ def predicted_sales():
                             continue
 
                         near, _ = find_nearest_area(adj_lat, adj_lon)
+
                         try:
                             input_vec = load_predicted_vector(near["상권_코드"])
                         except Exception:
