@@ -433,8 +433,11 @@ def predicted_sales():
             print("\n✅ 주변에 더 나은 위치는 없습니다.")
 
         print("입력위치", base_result)
-        print("추천위치", len(final_recommendations), ranked_output)
+        print("추천위치", len(final_recommendations), final_recommendations)
         print("추천순위", len(ranked_output), ranked_output)
+        print("input_vector", input_vec)
+        print("model_path", model_paths[category])
+        
 
         return jsonify({
             "입력위치": base_result,
