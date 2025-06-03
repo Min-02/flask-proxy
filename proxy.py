@@ -150,12 +150,12 @@ def predicted_sales():
         if "운영_영업_개월_평균" in df.columns and "서울_운영_영업_개월_평균" in df.columns:
             df["상권_vs_서울_운영차"] = df["운영_영업_개월_평균"] - df["서울_운영_영업_개월_평균"]
         else:
-            df["상권_vs_서울_운영차"] = np.nan
+            df["상권_vs_서울_운영차"] = 0
 
         if "폐업_영업_개월_평균" in df.columns and "서울_폐업_영업_개월_평균" in df.columns:
             df["상권_vs_서울_폐업차"] = df["폐업_영업_개월_평균"] - df["서울_폐업_영업_개월_평균"]
         else:
-            df["상권_vs_서울_폐업차"] = np.nan
+            df["상권_vs_서울_폐업차"] = 0
 
         df["경쟁_밀집도"] = df["300m내_경쟁_업종_수"] / (df["총_유동인구_수"] + 1)
         df["역_접근성"] = df["가장_가까운_역_승하차_인원_수"] / (df["역까지_거리_m"] + 1)
@@ -238,12 +238,12 @@ def predicted_sales():
             # ✅ 입력 피처 구성
             input_vec = load_predicted_vector(nearest["상권_코드"])
             input_vec["역까지_거리_m"] = station_dist
-            input_vec["가장_가까운_역_승하차_인원_수"] = station_traffic
+            input_vec["가장_가까운_역_승하차_인원_수"] = int(station_traffic)
             input_vec["상권_변화_지표_명"] = int(change_encoded)
             if store_count is not None:
-                input_vec["300m내_경쟁_업종_수"] = store_count
+                input_vec["300m내_경쟁_업종_수"] = int(store_count)
             else:
-                input_vec["300m내_경쟁_업종_수"] = nearest["300m내_경쟁_업종_수"]  # fallback
+                input_vec["300m내_경쟁_업종_수"] = int(nearest["300m내_경쟁_업종_수"])  # fallback
 
             if "면적(㎡)" not in input_vec and "면적(㎡)" in nearest:
                 input_vec["면적(㎡)"] = nearest["면적(㎡)"]
@@ -261,10 +261,10 @@ def predicted_sales():
             if not recent_row.empty:
                 for col in needed_cols:
                     if col not in input_vec:
-                        input_vec[col] = recent_row.iloc[0].get(col, np.nan)
+                        input_vec[col] = int(recent_row.iloc[0].get(col, 0))
             else:
                 for col in needed_cols:
-                    input_vec[col] = np.nan
+                    input_vec[col] = 0
 
             # ✅ 파생 피처 포함 입력 데이터프레임 구성 및 예측
             input_df = pd.DataFrame([input_vec])
@@ -321,10 +321,10 @@ def predicted_sales():
                         stat_name, stat_d, stat_t = find_nearest_station(adj_lat, adj_lon)
                         chg_enc = change_encoder.transform([near["상권_변화_지표_명"]])[0]
 
-                        input_vec["역까지_거리_m"] = stat_d
-                        input_vec["가장_가까운_역_승하차_인원_수"] = stat_t
+                        input_vec["역까지_거리_m"] = int(stat_d)
+                        input_vec["가장_가까운_역_승하차_인원_수"] = int(stat_t)
                         input_vec["상권_변화_지표_명"] = int(chg_enc)
-                        input_vec["300m내_경쟁_업종_수"] = near["300m내_경쟁_업종_수"]
+                        input_vec["300m내_경쟁_업종_수"] = int(near["300m내_경쟁_업종_수"])
 
                         if "면적(㎡)" not in input_vec and "면적(㎡)" in nearest:
                             input_vec["면적(㎡)"] = nearest["면적(㎡)"]
@@ -338,10 +338,10 @@ def predicted_sales():
                         if not recent_row.empty:
                             for col in needed_cols:
                                 if col not in input_vec:
-                                    input_vec[col] = recent_row.iloc[0].get(col, np.nan)
+                                    input_vec[col] = int(recent_row.iloc[0].get(col, 0))
                         else:
                             for col in needed_cols:
-                                input_vec[col] = np.nan
+                                input_vec[col] = 0
 
                         # 🔹 계절성 피처 삽입
                         input_vec["연도"] = 2025
