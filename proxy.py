@@ -201,10 +201,10 @@ def predicted_sales():
     category = industry_code_map.get(indsMclsCd)
 
     print(lat, lon, start_time, end_time, selected_days, category, indsMclsCd)
-    
+
     # 한글 폰트 설정
     font_path = os.path.join(os.path.dirname(__file__), 'NanumGothic-Regular.ttf')
-    print("Font exists?", os.path.exists(font_path))
+    print("Font exists?(SHAP)", os.path.exists(font_path))
     font_prop = fm.FontProperties(fname=font_path)
     plt.rcParams['axes.unicode_minus'] = False
 
@@ -532,8 +532,9 @@ def population_chart():
         plt.savefig(buf, format='png')
         buf.seek(0)
         plt.close()
+        img_base64 = base64.b64encode(buf.read()).decode('utf-8')
 
-        return send_file(buf, mimetype='image/png')
+        return {"image_base64": img_base64}
 
     except Exception as e:
         print("⚠️ population_chart API 오류:", e)
