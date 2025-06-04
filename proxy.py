@@ -201,6 +201,12 @@ def predicted_sales():
     category = industry_code_map.get(indsMclsCd)
 
     print(lat, lon, start_time, end_time, selected_days, category, indsMclsCd)
+    
+    # 한글 폰트 설정
+    font_path = os.path.join(os.path.dirname(__file__), 'NanumGothic-Regular.ttf')
+    print("Font exists?", os.path.exists(font_path))
+    font_prop = fm.FontProperties(fname=font_path)
+    plt.rcParams['axes.unicode_minus'] = False
 
     try:
         # 📍 입력 위치 기준 상권/지하철 분석
