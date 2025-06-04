@@ -473,9 +473,12 @@ def predicted_sales():
         # 그래프 출력
         plt.figure(figsize=(8, 6))
         plt.barh(top_df["feature_display"][::-1], top_df["shap_value"][::-1], color='skyblue')
-        plt.title(f"상위 {n_top}개 Feature 중요도", fontproperties=font_prop)
-        plt.xlabel("평균 SHAP 값 (모델 영향력)", fontproperties=font_prop)
-        plt.yticks(fontproperties=font_prop)
+        plt.title(f"상위 {n_top}개 Feature 중요도", fontproperties=font_prop, fontsize=18)
+        plt.xlabel("평균 SHAP 값 (모델 영향력)", fontproperties=font_prop, fontsize=14)
+        plt.yticks(fontproperties=font_prop, fontsize=13)
+        plt.tick_params(axis='x', labelsize=12)
+        plt.tick_params(axis='y', labelsize=13)
+
         plt.tight_layout()
 
         buf = io.BytesIO()
@@ -552,10 +555,10 @@ def population_chart():
             if sum(data) > 0:
                 ax.pie(data, labels=lbls, autopct='%1.1f%%', shadow=True, startangle=140,
                        colors=soft_colors[:len(data)],
-                       textprops={'fontproperties': font_prop})
+                       textprops={'fontproperties': font_prop, 'fontsize': 12})
             else:
                 ax.text(0, 0, "데이터 없음", ha='center', va='center', fontproperties=font_prop)
-            ax.set_title(title, fontproperties=font_prop)
+            ax.set_title(title, fontproperties=font_prop, fontsize=16)
             ax.axis('equal')
 
         buf = io.BytesIO()
