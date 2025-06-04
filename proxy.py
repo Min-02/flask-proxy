@@ -454,8 +454,10 @@ def predicted_sales():
 
         plt.figure(figsize=(8, 6))
         plt.barh(shap_df["feature"][::-1], shap_df["shap_value"][::-1], color='skyblue')
-        plt.title("상위 7개 Feature 중요도")
-        plt.xlabel("평균 SHAP 값 (모델 영향력)")
+        plt.title("상위 7개 Feature 중요도", fontproperties=font_prop)
+        plt.xlabel("평균 SHAP 값 (모델 영향력)", fontproperties=font_prop)
+        # y축 레이블도 한글이므로 폰트 지정
+        plt.yticks(fontproperties=font_prop)
         plt.tight_layout()
 
         buf = io.BytesIO()
