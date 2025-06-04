@@ -439,24 +439,42 @@ def predicted_sales():
         else:
             print("\n✅ 주변에 더 나은 위치는 없습니다.")
 
-        # SHAP 처리
-        input_df = pd.DataFrame([input_vec])
-        feature_names = model.feature_names_in_
-        input_df = input_df.reindex(columns=feature_names, fill_value=0)
+        # 📌 SHAP 값 계산
+        explainer = shap.Explainer(model)
+        shap_values = explainer(input_df)
 
-        explainer = shap.TreeExplainer(model)
-        shap_values = explainer.shap_values(input_df)
+        # ✅ SHAP 피처 이름 매핑 (시각화용)
+        shap_name_map = {
+            "남성_비율": "유동인구_남성비율",
+            "여성_비율": "유동인구_여성비율",
+            "연령대_중심값": "유동인구_평균연령",
+            "상주대비_유동비": "상주인구_대비_유동비율",
+            "직장대비_유동비": "직장인구_대비_유동비율",
+            "상권_vs_서울_운영차": "운영개월_상권_서울_차이",
+            "상권_vs_서울_폐업차": "폐업개월_상권_서울_차이",
+            "경쟁_밀집도": "경쟁업체_밀집도",
+            "역_접근성": "지하철_접근성지수",
+            "면적당_유동인구": "면적대비_유동인구_밀도",
+            "면적당_경쟁_업종_수": "면적대비_경쟁업체_밀도",
+            "log_면적": "면적_로그변환값"
+        }
 
+        # 📌 SHAP 값 평균 기준 상위 n개 추출
         shap_df = pd.DataFrame({
             'feature': input_df.columns,
-            'shap_value': np.abs(shap_values).mean(axis=0)
-        }).sort_values("shap_value", ascending=False).head(7)
+            'shap_value': np.abs(shap_values.values).mean(axis=0)
+        })
+        # ✅ 시각화용 이름 치환
+        shap_df["feature_display"] = shap_df["feature"].apply(lambda x: shap_name_map.get(x, x))
 
+        n_top = 7
+        top_df = shap_df.sort_values("shap_value", ascending=False).head(n_top)
+
+        # 그래프 출력
         plt.figure(figsize=(8, 6))
-        plt.barh(shap_df["feature"][::-1], shap_df["shap_value"][::-1], color='skyblue')
-        plt.title("상위 7개 Feature 중요도", fontproperties=font_prop)
+        plt.barh(top_df["feature_display"][::-1], top_df["shap_value"][::-1], color='skyblue')
+        plt.title(f"상위 {n_top}개 Feature 중요도", fontproperties=font_prop)
         plt.xlabel("평균 SHAP 값 (모델 영향력)", fontproperties=font_prop)
-        # y축 레이블도 한글이므로 폰트 지정
         plt.yticks(fontproperties=font_prop)
         plt.tight_layout()
 
@@ -494,6 +512,16 @@ def population_chart():
     font_prop = fm.FontProperties(fname=font_path)
     plt.rcParams['axes.unicode_minus'] = False
 
+    soft_colors = [
+        '#a6cee3',  # 연한 파랑
+        '#b2df8a',  # 연한 초록
+        '#ffff99',  # 연한 노랑
+        '#fdbf6f',  # 연한 주황
+        '#cab2d6',  # 연한 보라
+        '#fb9a99',  # 연한 핑크
+        '#fccde5',  # 연한 분홍
+    ]
+
     # 🔹 데이터 미리 로딩
     df = pd.read_csv("0510_광진구 상권, 지하철 통합 완성본.csv", encoding="utf-8")
 
@@ -523,6 +551,7 @@ def population_chart():
         for ax, (data, lbls, title) in zip(axes.flat, labels):
             if sum(data) > 0:
                 ax.pie(data, labels=lbls, autopct='%1.1f%%', shadow=True, startangle=140,
+                       colors=soft_colors[:len(data)],
                        textprops={'fontproperties': font_prop})
             else:
                 ax.text(0, 0, "데이터 없음", ha='center', va='center', fontproperties=font_prop)
