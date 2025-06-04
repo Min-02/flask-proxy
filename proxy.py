@@ -433,6 +433,33 @@ def predicted_sales():
         else:
             print("\n✅ 주변에 더 나은 위치는 없습니다.")
 
+        # SHAP 처리
+        input_df = pd.DataFrame([input_vec])
+        feature_names = model.feature_names_in_
+        input_df = input_df.reindex(columns=feature_names, fill_value=0)
+
+        explainer = shap.TreeExplainer(model)
+        shap_values = explainer.shap_values(input_df)
+
+        shap_df = pd.DataFrame({
+            'feature': input_df.columns,
+            'shap_value': np.abs(shap_values).mean(axis=0)
+        }).sort_values("shap_value", ascending=False).head(7)
+
+        plt.figure(figsize=(8, 6))
+        plt.barh(shap_df["feature"][::-1], shap_df["shap_value"][::-1], color='skyblue')
+        plt.title("상위 7개 Feature 중요도")
+        plt.xlabel("평균 SHAP 값 (모델 영향력)")
+        plt.tight_layout()
+
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png')
+        buf.seek(0)
+        plt.close()
+
+        # base64로 변환
+        shap_base64 = base64.b64encode(buf.read()).decode("utf-8")
+
         print("입력위치", base_result)
         print("추천위치", len(final_recommendations), final_recommendations)
         print("추천순위", len(ranked_output), ranked_output)
@@ -445,7 +472,8 @@ def predicted_sales():
             "추천위치": final_recommendations,
             "추천순위": ranked_output,
             "input_vector": input_vec,
-            "model_path": model_paths[category]
+            "model_path": model_paths[category],
+            "shap_chart_base64": shap_base64
             })
     except Exception as e:
         return jsonify({'message': f"❌ 예측 중 오류 발생: {str(e)}"})
@@ -504,54 +532,6 @@ def population_chart():
     except Exception as e:
         print("⚠️ population_chart API 오류:", e)
         return {"error": str(e)}, 400
-
-@app.route("/api/shap_chart", methods=["POST"])
-def shap_chart():
-    # 한글 폰트 설정
-    font_path = os.path.join(os.path.dirname(__file__), 'NanumGothic-Regular.ttf')
-    print("Font exists(SHAP)?", os.path.exists(font_path))
-    font_prop = fm.FontProperties(fname=font_path)
-    plt.rcParams['axes.unicode_minus'] = False
-
-    try:
-        data = request.get_json()
-        input_vec = data["features"]
-        model_path = data["model_path"]
-
-        input_df = pd.DataFrame([input_vec])
-        # 문자열(object) 컬럼 제거
-        input_df = input_df.select_dtypes(include=["number", "bool"])
-        model = joblib.load(model_path)
-
-        # 안전하게 TreeExplainer로 고정
-        explainer = shap.TreeExplainer(model)
-        shap_values = explainer.shap_values(input_df)
-
-        shap_df = pd.DataFrame({
-            'feature': input_df.columns,
-            'shap_value': np.abs(shap_values).mean(axis=0)
-        }).sort_values("shap_value", ascending=False).head(7)
-
-        plt.figure(figsize=(8, 6))
-        plt.barh(shap_df["feature"][::-1], shap_df["shap_value"][::-1], color='skyblue')
-        plt.title("상위 7개 Feature 중요도", fontproperties=font_prop)
-        plt.xlabel("평균 SHAP 값 (모델 영향력)", fontproperties=font_prop)
-        plt.tight_layout()
-
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png')
-        buf.seek(0)
-        plt.close()
-
-        response = send_file(buf, mimetype='image/png')
-        response.headers['Access-Control-Allow-Origin'] = '*'
-
-        return response
-
-    except Exception as e:
-        print("SHAP 에러 발생:", e)
-        traceback.print_exc()
-        return jsonify({"error": f"SHAP 오류: {str(e)}"}), 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
